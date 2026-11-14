@@ -1,0 +1,16 @@
+{
+  "name": "Gym Log",
+  "short_name": "Gym Log",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0e14",
+  "theme_color": "#0b0e14",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/google/material-design-icons/master/png/places/fitness_center/materialicons/48dp/2x/baseline_fitness_center_white_48dp.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    }
+  ]
+}
