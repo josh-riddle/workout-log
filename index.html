@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#0b0e14" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Gym Log</title>
+<link rel="manifest" href="data:application/manifest+json,{"name":"Gym Log","short_name":"Gym Log","start_url":".","display":"standalone","background_color":"%230b0e14","theme_color":"%230b0e14"}" />
+<style>
+  :root {
+    --bg: #0b0e14;
+    --surface: #141923;
+    --surface-2: #1c2331;
+    --border: #283244;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent-dim: rgba(56, 189, 248, 0.14);
+    --green: #22c55e;
+    --green-dim: rgba(34, 197, 94, 0.16);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245, 158, 11, 0.16);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167, 139, 250, 0.14);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .app-shell {
+    max-width: 540px;
+    margin: 0 auto;
+    padding: 0 14px 175px 14px;
+  }
+  .top-bar {
+    position: sticky; top: 0; z-index: 30;
+    background: rgba(11, 14, 20, 0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 14px 10px 14px;
+    margin: 0 -14px 12px -14px;
+  }
+  .brand-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .brand-title { font-size: 16px; font-weight: 800; letter-spacing: 0.2px; }
+  .sync-pill {
+    font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+    background: var(--surface-2); color: var(--muted); border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .sync-pill.live { color: var(--green); border-color: rgba(34,197,94,0.4); background: var(--green-dim); }
+  .sync-pill.syncing { color: var(--amber); border-color: rgba(245,158,11,0.4); }
+
+  .day-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 6px 8px;
+  }
+  .nav-arrow {
+    width: 40px; height: 40px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--text); font-size: 18px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .nav-arrow:disabled { opacity: 0.3; cursor: default; }
+  .nav-center { text-align: center; flex: 1; padding: 0 8px; }
+  .nav-date { font-size: 15px; font-weight: 700; }
+  .nav-meta { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
+  .badge {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
+    padding: 2px 7px; border-radius: 6px; text-transform: uppercase;
+  }
+  .badge-next { background: var(--accent-dim); color: var(--accent); }
+  .badge-done { background: var(--green-dim); color: var(--green); }
+  .badge-missed { background: var(--amber-dim); color: var(--amber); }
+  .badge-upcoming { background: var(--surface-2); color: var(--muted); }
+
+  .jump-btn {
+    width: 100%; margin-top: 8px; padding: 7px;
+    background: var(--accent-dim); color: var(--accent);
+    border: 1px solid rgba(56,189,248,0.35); border-radius: 10px;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+
+  .prog-wrap { margin-top: 9px; }
+  .prog-labels {
+    display: flex; justify-content: space-between;
+    font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 4px;
+  }
+  .prog-track {
+    width: 100%; height: 6px; background: var(--surface-2);
+    border-radius: 999px; overflow: hidden;
+  }
+  .prog-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), var(--green));
+    border-radius: 999px; transition: width 0.25s ease;
+  }
+
+  .pill-strip {
+    display: flex; gap: 6px; padding: 8px 0 2px 0;
+  }
+  .sec-pill {
+    flex: 1; text-align: center;
+    white-space: nowrap; font-size: 11px; font-weight: 700;
+    padding: 6px 8px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer;
+  }
+  .sec-pill.done {
+    border-color: rgba(34,197,94,0.45);
+    background: var(--green-dim);
+    color: var(--green);
+  }
+
+  .sec-header {
+    display: flex; align-items: center; gap: 8px;
+    margin: 16px 2px 8px 2px;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.9px;
+    text-transform: uppercase; color: var(--muted);
+    scroll-margin-top: 175px;
+  }
+  .sec-header::after {
+    content: ""; flex: 1; height: 1px; background: var(--border);
+  }
+  .sec-header:first-child { margin-top: 4px; }
+
+  .ex-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 14px; margin-bottom: 12px;
+  }
+  .ex-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px; gap: 8px;
+  }
+  .ex-title-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ex-name { font-size: 16px; font-weight: 800; }
+  .cat-tag {
+    font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px;
+    text-transform: uppercase; letter-spacing: 0.4px;
+  }
+  .cat-main { background: var(--accent-dim); color: var(--accent); }
+  .cat-acc { background: var(--purple-dim); color: var(--purple); }
+  .cat-cardio { background: var(--green-dim); color: var(--green); }
+  .ex-sub { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+
+  .set-row {
+    display: grid;
+    grid-template-columns: 30px 1fr 1fr 48px;
+    align-items: center; gap: 8px;
+    padding: 8px 0;
+    border-top: 1px solid rgba(40, 50, 68, 0.6);
+  }
+  .set-row.cardio-row {
+    grid-template-columns: 30px 1fr 48px;
+  }
+  .set-row:first-of-type { border-top: none; }
+  .set-num { font-size: 12px; font-weight: 700; color: var(--muted); }
+
+  .stepper {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 4px;
+  }
+  .step-btn {
+    width: 28px; height: 28px; border-radius: 7px; border: none;
+    background: var(--bg); color: var(--text); font-weight: 800; font-size: 15px;
+    cursor: pointer;
+  }
+  .step-val { text-align: center; }
+  .step-main { font-size: 14px; font-weight: 800; display: block; }
+  .step-hint { font-size: 10px; color: var(--muted); display: block; }
+
+  .check-btn {
+    width: 46px; height: 42px; border-radius: 11px;
+    border: 2px solid #475569;
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 18px; font-weight: 900;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .check-btn.checked {
+    background: var(--green);
+    border-color: #4ade80;
+    color: #052e16;
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.35);
+  }
+
+  .finish-btn {
+    width: 100%; padding: 15px; margin-top: 6px;
+    border-radius: 14px; border: none;
+    background: var(--accent); color: #082f49;
+    font-size: 15px; font-weight: 800; cursor: pointer;
+  }
+  .finish-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .rest-bar {
+    position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
+    width: calc(100% - 28px); max-width: 512px;
+    background: #182030; border: 1px solid var(--accent);
+    border-radius: 14px; padding: 10px 14px;
+    display: none; align-items: center; justify-content: space-between;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.65); z-index: 40;
+  }
+  .rest-bar.active { display: flex; }
+  .rest-time { font-size: 20px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .rest-controls { display: flex; gap: 6px; }
+  .rest-btn {
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text); font-size: 12px; font-weight: 700;
+    cursor: pointer;
+  }
+
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(11, 14, 20, 0.96);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: center;
+    padding: 8px 14px 12px 14px; z-index: 35;
+  }
+  .bottom-inner {
+    width: 100%; max-width: 512px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .tab-btn {
+    background: transparent; border: 1px solid transparent;
+    border-radius: 11px; padding: 8px 4px;
+    color: var(--muted); font-size: 12px; font-weight: 700;
+    cursor: pointer; text-align: center;
+  }
+  .tab-btn.active {
+    background: var(--accent-dim);
+    border-color: rgba(56, 189, 248, 0.35);
+    color: var(--accent);
+  }
+  .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+  .stat-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px;
+  }
+  .stat-lbl { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+  .stat-num { font-size: 20px; font-weight: 900; margin-top: 4px; color: var(--accent); }
+  .empty-state {
+    text-align: center; padding: 40px 20px; color: var(--muted);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div id="view-workout">
+    <div class="top-bar">
+      <div class="brand-row">
+        <div class="brand-title">Gym Log</div>
+        <button id="syncPill" class="sync-pill" onclick="refreshFromSheet()">Connecting...</button>
+      </div>
+      <div class="day-nav">
+        <button id="prevBtn" class="nav-arrow" onclick="stepDay(-1)">‹</button>
+        <div class="nav-center">
+          <div id="navDate" class="nav-date">Loading schedule...</div>
+          <div id="navMeta" class="nav-meta"></div>
+        </div>
+        <button id="nextBtn" class="nav-arrow" onclick="stepDay(1)">›</button>
+      </div>
+      <button id="jumpNextBtn" class="jump-btn" style="display:none;" onclick="jumpToTarget()">Jump to Next Up →</button>
+      <div id="progWrap" class="prog-wrap" style="display:none;">
+        <div class="prog-labels">
+          <span id="progText">0 / 0 Sets Done</span>
+          <span id="progPct">0%</span>
+        </div>
+        <div class="prog-track"><div id="progFill" class="prog-fill" style="width:0%"></div></div>
+      </div>
+      <div id="pillStrip" class="pill-strip"></div>
+    </div>
+    <div id="workoutContainer"></div>
+  </div>
+
+  <div id="view-progress" style="display:none; padding-top:14px;">
+    <div style="font-size:18px;font-weight:800;margin-bottom:12px;">Progress & Estimated 1RM</div>
+    <div id="progressContainer"></div>
+  </div>
+
+  <div id="view-sync" style="display:none; padding-top:14px;">
+    <div style="font-size:18px;font-weight:800;margin-bottom:12px;">Google Sheets Sync</div>
+    <div class="ex-card">
+      <div style="font-weight:800;margin-bottom:6px;">Direct API Sync</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px;">
+        Connected directly to your Google Sheet via Apps Script JSON API. Any exercise changes, weight edits, or new monthly tabs pull automatically.
+      </div>
+      <button class="finish-btn" onclick="refreshFromSheet()">Pull Latest Schedule From Sheet</button>
+    </div>
+  </div>
+</div>
+
+<div id="restBar" class="rest-bar">
+  <div>
+    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;">Rest Timer</div>
+    <div id="restClock" class="rest-time">02:30</div>
+  </div>
+  <div class="rest-controls">
+    <button class="rest-btn" onclick="startRest(90)">1:30</button>
+    <button class="rest-btn" onclick="startRest(150)">2:30</button>
+    <button class="rest-btn" onclick="adjustRest(30)">+30s</button>
+    <button class="rest-btn" onclick="stopRest()">✕</button>
+  </div>
+</div>
+
+<div class="bottom-nav">
+  <div class="bottom-inner">
+    <button id="tab-workout" class="tab-btn active" onclick="switchTab('workout')">Workout</button>
+    <button id="tab-progress" class="tab-btn" onclick="switchTab('progress')">Progress & 1RM</button>
+    <button id="tab-sync" class="tab-btn" onclick="switchTab('sync')">Sheets Sync</button>
+  </div>
+</div>
+
+<script>
+  const SCRIPT_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
+
+  let sessions = [];
+  let currentIdx = 0;
+  let targetIdx = 0;
+  let activeTab = 'workout';
+  let restSeconds = 0;
+  let restInterval = null;
+
+  function hasValue(v) {
+    return v !== '' && v !== null && v !== undefined && !isNaN(Number(v));
+  }
+
+  function todayIso() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function isSessionComplete(s) {
+    if (!s || !s.exercises || !s.exercises.length) return false;
+    return s.exercises.every(ex => ex.sets.every(st => st.completed));
+  }
+
+  function isSessionStarted(s) {
+    if (!s || !s.exercises) return false;
+    return s.exercises.some(ex => ex.sets.some(st => st.completed));
+  }
+
+  function findAutoTargetIndex(list) {
+    if (!list.length) return 0;
+    const today = todayIso();
+    const exactToday = list.findIndex(s => s.date === today);
+    if (exactToday !== -1) return exactToday;
+    const nextUpcoming = list.findIndex(s => s.date >= today && !isSessionComplete(s));
+    if (nextUpcoming !== -1) return nextUpcoming;
+    return list.length - 1;
+  }
+
+  function getExerciseCategory(ex, liftRank) {
+    if (ex.isCardio) return 'cardio';
+    const n = ex.name.toLowerCase();
+    const isAccessoryKeyword = /(curl|extension|hyper|raise|fly|pulldown|pushdown|face pull|plank|crunch|calf|shrug)/i.test(n);
+    if (liftRank >= 3 || isAccessoryKeyword) return 'accessory';
+    return 'main';
+  }
+
+  function calcPlates(weight) {
+    if (!weight || weight <= 45) return 'Bar only';
+    const perSide = (weight - 45) / 2;
+    if (perSide <= 0 || perSide % 2.5 !== 0) return `${perSide} lb/side`;
+    const plates = [45, 35, 25, 10, 5, 2.5];
+    let rem = perSide;
+    const out = [];
+    for (const p of plates) {
+      while (rem >= p - 0.001) { out.push(p); rem -= p; }
+    }
+    return out.length ? `${out.join('+')} / side` : 'Bar only';
+  }
+
+  function formatDisplayDate(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+    });
+  }
+
+  function setSyncStatus(text, cls) {
+    const pill = document.getElementById('syncPill');
+    pill.textContent = text;
+    pill.className = 'sync-pill ' + (cls || '');
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    ['workout', 'progress', 'sync'].forEach(t => {
+      document.getElementById(`view-${t}`).style.display = t === tab ? 'block' : 'none';
+      document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+    });
+    if (tab === 'progress') renderProgress();
+  }
+
+  async function refreshFromSheet() {
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      setSyncStatus('Missing URL', '');
+      return;
+    }
+    setSyncStatus('Syncing...', 'syncing');
+    try {
+      const resp = await fetch(SCRIPT_URL, { redirect: 'follow' });
+      const res = await resp.json();
+      if (res && res.sessions) {
+        sessions = res.sessions;
+        localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
+        targetIdx = findAutoTargetIndex(sessions);
+        currentIdx = targetIdx;
+        setSyncStatus('Synced ✓', 'live');
+        render();
+        if (activeTab === 'progress') renderProgress();
+      }
+    } catch (err) {
+      const cached = localStorage.getItem('gymlog_cache');
+      if (cached) {
+        sessions = JSON.parse(cached);
+        targetIdx = findAutoTargetIndex(sessions);
+        currentIdx = targetIdx;
+        setSyncStatus('Cached (Offline)', '');
+        render();
+      } else {
+        setSyncStatus('Sync Error', '');
+        alert('Could not reach sheet: ' + err.message);
+      }
+    }
+  }
+
+  function stepDay(delta) {
+    const next = currentIdx + delta;
+    if (next >= 0 && next < sessions.length) {
+      currentIdx = next;
+      render();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  function jumpToTarget() {
+    currentIdx = targetIdx;
+    render();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function adjustWeight(exIdx, setIdx, delta) {
+    const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
+    st.weight = Math.max(0, +(st.weight + delta).toFixed(1));
+    render();
+  }
+
+  function adjustReps(exIdx, setIdx, delta) {
+    const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
+    const base = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 5);
+    st.loggedReps = Math.max(0, base + delta);
+    render();
+  }
+
+  function toggleSet(exIdx, setIdx) {
+    const ex = sessions[currentIdx].exercises[exIdx];
+    const st = ex.sets[setIdx];
+    st.completed = !st.completed;
+    if (st.completed) {
+      if (!hasValue(st.loggedReps)) st.loggedReps = Number(st.goal || 5);
+      if (!ex.isCardio) {
+        const liftRank = sessions[currentIdx].exercises.slice(0, exIdx).filter(e => !e.isCardio).length;
+        const cat = getExerciseCategory(ex, liftRank);
+        startRest(cat === 'main' ? 150 : 90);
+      }
+    }
+    render();
+  }
+
+  async function saveCurrentSession() {
+    const session = sessions[currentIdx];
+    const btn = document.getElementById('finishBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving to Sheet...'; }
+    setSyncStatus('Saving...', 'syncing');
+
+    try {
+      const resp = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(session)
+      });
+      const res = await resp.json();
+      if (res && res.sessions) {
+        const activeId = session.id;
+        sessions = res.sessions;
+        localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
+        targetIdx = findAutoTargetIndex(sessions);
+        const foundIdx = sessions.findIndex(s => s.id === activeId);
+        currentIdx = foundIdx !== -1 ? foundIdx : targetIdx;
+      }
+      setSyncStatus('Saved ✓', 'live');
+      render();
+    } catch (err) {
+      setSyncStatus('Save Failed', '');
+      if (btn) { btn.disabled = false; btn.textContent = `Save Workout to ${session.tab}`; }
+      alert('Save failed: ' + err.message);
+    }
+  }
+
+  function startRest(sec) {
+    restSeconds = sec;
+    document.getElementById('restBar').classList.add('active');
+    updateRestClock();
+    clearInterval(restInterval);
+    restInterval = setInterval(() => {
+      restSeconds--;
+      if (restSeconds <= 0) { stopRest(); return; }
+      updateRestClock();
+    }, 1000);
+  }
+
+  function adjustRest(sec) {
+    restSeconds = Math.max(5, restSeconds + sec);
+    updateRestClock();
+  }
+
+  function stopRest() {
+    clearInterval(restInterval);
+    restInterval = null;
+    document.getElementById('restBar').classList.remove('active');
+  }
+
+  function updateRestClock() {
+    const m = String(Math.floor(restSeconds / 60)).padStart(2, '0');
+    const s = String(restSeconds % 60).padStart(2, '0');
+    document.getElementById('restClock').textContent = `${m}:${s}`;
+  }
+
+  function scrollToSection(cat) {
+    const el = document.getElementById(`sec-${cat}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function render() {
+    const container = document.getElementById('workoutContainer');
+    const pillStrip = document.getElementById('pillStrip');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const jumpBtn = document.getElementById('jumpNextBtn');
+    const progWrap = document.getElementById('progWrap');
+
+    if (!sessions.length) {
+      document.getElementById('navDate').textContent = 'No Workouts Found';
+      document.getElementById('navMeta').innerHTML = '';
+      pillStrip.innerHTML = '';
+      progWrap.style.display = 'none';
+      container.innerHTML = `<div class="empty-state">No scheduled <b>Workout</b> blocks were found in your monthly tabs yet.</div>`;
+      return;
+    }
+
+    prevBtn.disabled = currentIdx <= 0;
+    nextBtn.disabled = currentIdx >= sessions.length - 1;
+    jumpBtn.style.display = currentIdx !== targetIdx ? 'block' : 'none';
+
+    const s = sessions[currentIdx];
+    const today = todayIso();
+    const complete = isSessionComplete(s);
+    const started = isSessionStarted(s);
+
+    let totalSets = 0;
+    let doneSets = 0;
+    s.exercises.forEach(ex => ex.sets.forEach(st => {
+      totalSets++;
+      if (st.completed) doneSets++;
+    }));
+    const pct = totalSets ? Math.round((doneSets / totalSets) * 100) : 0;
+    progWrap.style.display = 'block';
+    document.getElementById('progText').textContent = `${doneSets} / ${totalSets} Sets Done`;
+    document.getElementById('progPct').textContent = `${pct}%`;
+    document.getElementById('progFill').style.width = `${pct}%`;
+
+    document.getElementById('navDate').textContent = formatDisplayDate(s.date);
+
+    let statusBadge = '';
+    if (complete) {
+      statusBadge = `<span class="badge badge-done">Completed ✓</span>`;
+    } else if (s.date === today) {
+      statusBadge = `<span class="badge badge-next">Today • Next Up</span>`;
+    } else if (currentIdx === targetIdx) {
+      statusBadge = `<span class="badge badge-next">Next Up</span>`;
+    } else if (s.date < today) {
+      statusBadge = `<span class="badge badge-missed">${started ? 'Partial Past' : 'Past Unlogged'}</span>`;
+    } else {
+      statusBadge = `<span class="badge badge-upcoming">Upcoming</span>`;
+    }
+
+    document.getElementById('navMeta').innerHTML = `
+      <span style="font-size:12px;font-weight:700;color:var(--accent);">${s.split}</span>
+      <span style="font-size:11px;color:var(--muted);">(${s.tab})</span>
+      ${statusBadge}
+    `;
+
+    const sectionState = {
+      main: { label: 'Main Compounds', present: false, allDone: true },
+      accessory: { label: 'Accessories', present: false, allDone: true },
+      cardio: { label: 'Conditioning', present: false, allDone: true }
+    };
+
+    let liftRank = 0;
+    let lastSection = '';
+    const sectionTitles = {
+      main: 'Main Compounds',
+      accessory: 'Accessories',
+      cardio: 'Conditioning'
+    };
+
+    container.innerHTML = s.exercises.map((ex, exIdx) => {
+      const cat = getExerciseCategory(ex, liftRank);
+      if (!ex.isCardio) liftRank++;
+
+      sectionState[cat].present = true;
+      if (!ex.sets.every(st => st.completed)) {
+        sectionState[cat].allDone = false;
+      }
+
+      let sectionHtml = '';
+      if (cat !== lastSection) {
+        lastSection = cat;
+        sectionHtml = `<div id="sec-${cat}" class="sec-header">${sectionTitles[cat]}</div>`;
+      }
+
+      const tagHtml = cat === 'main'
+        ? `<span class="cat-tag cat-main">Main Lift</span>`
+        : cat === 'accessory'
+          ? `<span class="cat-tag cat-acc">Accessory</span>`
+          : `<span class="cat-tag cat-cardio">Cardio</span>`;
+
+      const topWeight = Math.max(...ex.sets.map(st => st.weight || 0));
+      const rightLabel = cat === 'cardio'
+        ? `Goal: ${ex.sets[0]?.goal || 15} min`
+        : (topWeight > 0 ? `Top: ${topWeight} lb` : 'Bodyweight');
+
+      const rowsHtml = ex.sets.map((st, setIdx) => {
+        const displayReps = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 5);
+
+        if (cat === 'cardio') {
+          return `
+            <div class="set-row cardio-row">
+              <div class="set-num">S${setIdx + 1}</div>
+              <div class="stepper">
+                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
+                <div class="step-val">
+                  <span class="step-main">${displayReps} min</span>
+                  <span class="step-hint">Goal: ${st.goal} min</span>
+                </div>
+                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
+              </div>
+              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
+            </div>
+          `;
+        }
+
+        const weightHint = cat === 'main'
+          ? calcPlates(st.weight)
+          : (st.weight > 0 ? 'Accessory' : 'Bodyweight');
+
+        return `
+          <div class="set-row">
+            <div class="set-num">S${setIdx + 1}</div>
+            <div class="stepper">
+              <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -2.5)">−</button>
+              <div class="step-val">
+                <span class="step-main">${st.weight} lb</span>
+                <span class="step-hint">${weightHint}</span>
+              </div>
+              <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, 2.5)">+</button>
+            </div>
+            <div class="stepper">
+              <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
+              <div class="step-val">
+                <span class="step-main">${displayReps} reps</span>
+                <span class="step-hint">Goal: ${st.goal}</span>
+              </div>
+              <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
+            </div>
+            <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        ${sectionHtml}
+        <div id="ex-card-${exIdx}" class="ex-card">
+          <div class="ex-header">
+            <div class="ex-title-group">
+              <div class="ex-name">${ex.name}</div>
+              ${tagHtml}
+            </div>
+            <div class="ex-sub">${rightLabel}</div>
+          </div>
+          ${rowsHtml}
+        </div>
+      `;
+    }).join('') + `
+      <button id="finishBtn" class="finish-btn" onclick="saveCurrentSession()">
+        Save Workout to ${s.tab}
+      </button>
+    `;
+
+    pillStrip.innerHTML = ['main', 'accessory', 'cardio']
+      .filter(cat => sectionState[cat].present)
+      .map(cat => {
+        const st = sectionState[cat];
+        return `<button class="sec-pill ${st.allDone ? 'done' : ''}" onclick="scrollToSection('${cat}')">${st.label}${st.allDone ? ' ✓' : ''}</button>`;
+      }).join('');
+  }
+
+  function renderProgress() {
+    const box = document.getElementById('progressContainer');
+    const lifts = ['Back Squat', 'Flat Bench', 'Barbell Row', 'Incline Bench', 'Deadlift'];
+    const bestMap = {};
+    lifts.forEach(l => bestMap[l] = { weight: 0, reps: 0, e1rm: 0, date: '' });
+
+    sessions.forEach(s => {
+      s.exercises.forEach(ex => {
+        if (!bestMap[ex.name]) return;
+        ex.sets.forEach(st => {
+          if (st.completed && st.weight > 0 && hasValue(st.loggedReps)) {
+            const r = Number(st.loggedReps);
+            const est = Math.round(st.weight * (1 + r / 30));
+            if (est > bestMap[ex.name].e1rm) {
+              bestMap[ex.name] = { weight: st.weight, reps: r, e1rm: est, date: s.date };
+            }
+          }
+        });
+      });
+    });
+
+    box.innerHTML = `<div class="stat-grid">` + lifts.map(name => {
+      const b = bestMap[name];
+      return `
+        <div class="stat-box">
+          <div class="stat-lbl">${name}</div>
+          <div class="stat-num">${b.e1rm ? b.e1rm + ' lb' : '—'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px;">
+            ${b.e1rm ? `Best: ${b.weight} × ${b.reps} (${b.date})` : 'No logged sets yet'}
+          </div>
+        </div>
+      `;
+    }).join('') + `</div>`;
+  }
+
+  window.addEventListener('DOMContentLoaded', refreshFromSheet);
+</script>
+</body>
+</html>
