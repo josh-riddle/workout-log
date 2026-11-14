@@ -4,13 +4,21 @@
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#0b0e14",
   "theme_color": "#0b0e14",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/google/material-design-icons/master/png/places/fitness_center/materialicons/48dp/2x/baseline_fitness_center_white_48dp.png",
-      "sizes": "96x96",
-      "type": "image/png"
+      "src": "https://cdn-icons-png.flaticon.com/192/2964/2964514.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2964/2964514.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
