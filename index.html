@@ -454,7 +454,7 @@
   let selectedLift = 'Back Squat';
   let calYear = new Date().getFullYear();
   let calMonth = new Date().getMonth();
-  let dirtyCount = 0;
+  let savedSnapshot = '';
   let restSeconds = 0;
   let restInterval = null;
 
@@ -521,27 +521,60 @@
     pill.className = 'sync-pill ' + (cls || '');
   }
 
-  function markDirty() {
-    dirtyCount++;
-    setSyncStatus('Unsaved Changes', 'dirty');
-    updateFabVisibility();
+  // Snapshot & diff-based dirty state so undoing a mistake hides the FAB cleanly
+  function getComparableSets(s) {
+    if (!s || !s.exercises) return [];
+    const out = [];
+    s.exercises.forEach(ex => {
+      ex.sets.forEach(st => {
+        const reps = st.completed
+          ? (hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 5))
+          : '';
+        out.push({
+          w: Number(st.weight || 0),
+          r: reps,
+          c: Boolean(st.completed)
+        });
+      });
+    });
+    return out;
   }
 
-  function clearDirty() {
-    dirtyCount = 0;
-    updateFabVisibility();
+  function captureSavedSnapshot() {
+    savedSnapshot = JSON.stringify(getComparableSets(sessions[currentIdx]));
+    syncDirtyState();
   }
 
-  function updateFabVisibility() {
+  function getModifiedSetCount() {
+    if (!savedSnapshot || !sessions[currentIdx]) return 0;
+    const orig = JSON.parse(savedSnapshot);
+    const curr = getComparableSets(sessions[currentIdx]);
+    if (orig.length !== curr.length) return curr.length;
+
+    let diffs = 0;
+    for (let i = 0; i < curr.length; i++) {
+      if (orig[i].w !== curr[i].w || orig[i].r !== curr[i].r || orig[i].c !== curr[i].c) {
+        diffs++;
+      }
+    }
+    return diffs;
+  }
+
+  function syncDirtyState() {
+    const diffs = getModifiedSetCount();
     const fab = document.getElementById('saveFab');
     const lbl = document.getElementById('saveFabLabel');
     const restActive = document.getElementById('restBar').classList.contains('active');
-    const show = dirtyCount > 0 && activeTab === 'workout' && sessions.length > 0;
+    const show = diffs > 0 && activeTab === 'workout' && sessions.length > 0;
 
     fab.classList.toggle('visible', show);
     fab.classList.toggle('above-timer', restActive);
+
     if (show) {
-      lbl.textContent = dirtyCount === 1 ? 'Save Change' : `Save Changes (${dirtyCount})`;
+      lbl.textContent = diffs === 1 ? 'Save 1 Set' : `Save ${diffs} Sets`;
+      setSyncStatus('Unsaved Changes', 'dirty');
+    } else if (sessions.length > 0) {
+      setSyncStatus('Synced ✓', 'live');
     }
   }
 
@@ -551,7 +584,7 @@
       document.getElementById(`view-${t}`).style.display = t === tab ? 'block' : 'none';
       document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
     });
-    updateFabVisibility();
+    syncDirtyState();
     if (tab === 'progress') renderProgress();
     if (tab === 'calendar') renderCalendar();
   }
@@ -575,8 +608,7 @@
           calYear = y;
           calMonth = m - 1;
         }
-        clearDirty();
-        setSyncStatus('Synced ✓', 'live');
+        captureSavedSnapshot();
         render();
         if (activeTab === 'progress') renderProgress();
         if (activeTab === 'calendar') renderCalendar();
@@ -587,6 +619,7 @@
         sessions = JSON.parse(cached);
         targetIdx = findAutoTargetIndex(sessions);
         currentIdx = targetIdx;
+        captureSavedSnapshot();
         setSyncStatus('Cached (Offline)', '');
         render();
       } else {
@@ -600,7 +633,7 @@
     const next = currentIdx + delta;
     if (next >= 0 && next < sessions.length) {
       currentIdx = next;
-      clearDirty();
+      captureSavedSnapshot();
       render();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -608,7 +641,7 @@
 
   function jumpToTarget() {
     currentIdx = targetIdx;
-    clearDirty();
+    captureSavedSnapshot();
     render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -616,7 +649,7 @@
   function jumpToSessionIndex(idx) {
     if (idx >= 0 && idx < sessions.length) {
       currentIdx = idx;
-      clearDirty();
+      captureSavedSnapshot();
       switchTab('workout');
       render();
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -626,7 +659,7 @@
   function adjustWeight(exIdx, setIdx, delta) {
     const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
     st.weight = Math.max(0, +(st.weight + delta).toFixed(1));
-    markDirty();
+    syncDirtyState();
     render();
   }
 
@@ -634,7 +667,7 @@
     const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
     const base = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 5);
     st.loggedReps = Math.max(0, base + delta);
-    markDirty();
+    syncDirtyState();
     render();
   }
 
@@ -649,8 +682,10 @@
         const cat = getExerciseCategory(ex, liftRank);
         startRest(cat === 'main' ? 150 : 90);
       }
+    } else if (getModifiedSetCount() === 0) {
+      stopRest();
     }
-    markDirty();
+    syncDirtyState();
     render();
   }
 
@@ -679,12 +714,11 @@
         currentIdx = foundIdx !== -1 ? foundIdx : targetIdx;
       }
       fab.disabled = false;
-      clearDirty();
-      setSyncStatus('Saved ✓', 'live');
+      captureSavedSnapshot();
       render();
     } catch (err) {
       fab.disabled = false;
-      updateFabVisibility();
+      syncDirtyState();
       setSyncStatus('Save Failed', '');
       alert('Save failed: ' + err.message);
     }
@@ -693,7 +727,7 @@
   function startRest(sec) {
     restSeconds = sec;
     document.getElementById('restBar').classList.add('active');
-    updateFabVisibility();
+    syncDirtyState();
     updateRestClock();
     clearInterval(restInterval);
     restInterval = setInterval(() => {
@@ -712,7 +746,7 @@
     clearInterval(restInterval);
     restInterval = null;
     document.getElementById('restBar').classList.remove('active');
-    updateFabVisibility();
+    syncDirtyState();
   }
 
   function updateRestClock() {
