@@ -37,7 +37,7 @@
   .app-shell {
     max-width: 540px;
     margin: 0 auto;
-    padding: 0 14px 175px 14px;
+    padding: 0 14px 180px 14px;
   }
   .top-bar {
     position: sticky; top: 0; z-index: 30;
@@ -59,7 +59,9 @@
   }
   .sync-pill.live { color: var(--green); border-color: rgba(34,197,94,0.4); background: var(--green-dim); }
   .sync-pill.syncing { color: var(--amber); border-color: rgba(245,158,11,0.4); }
+  .sync-pill.dirty { color: var(--accent); border-color: rgba(56,189,248,0.45); background: var(--accent-dim); }
 
+  /* Day Navigator */
   .day-nav {
     display: flex; align-items: center; justify-content: space-between;
     background: var(--surface); border: 1px solid var(--border);
@@ -92,6 +94,7 @@
     font-size: 12px; font-weight: 700; cursor: pointer;
   }
 
+  /* Session Progress Bar */
   .prog-wrap { margin-top: 9px; }
   .prog-labels {
     display: flex; justify-content: space-between;
@@ -106,6 +109,7 @@
     border-radius: 999px; transition: width 0.25s ease;
   }
 
+  /* Section Jump Pills */
   .pill-strip {
     display: flex; gap: 6px; padding: 8px 0 2px 0;
   }
@@ -122,6 +126,7 @@
     color: var(--green);
   }
 
+  /* Section Dividers */
   .sec-header {
     display: flex; align-items: center; gap: 8px;
     margin: 16px 2px 8px 2px;
@@ -134,6 +139,7 @@
   }
   .sec-header:first-child { margin-top: 4px; }
 
+  /* Exercise Cards */
   .ex-card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 16px; padding: 14px; margin-bottom: 12px;
@@ -197,14 +203,44 @@
     box-shadow: 0 0 12px rgba(34, 197, 94, 0.35);
   }
 
-  .finish-btn {
-    width: 100%; padding: 15px; margin-top: 6px;
-    border-radius: 14px; border: none;
-    background: var(--accent); color: #082f49;
-    font-size: 15px; font-weight: 800; cursor: pointer;
+  /* Contextual Save FAB */
+  .save-fab {
+    position: fixed;
+    right: 16px;
+    bottom: 74px;
+    z-index: 45;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 18px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: linear-gradient(135deg, #38bdf8, #0284c7);
+    color: #041d2e;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.2px;
+    box-shadow: 0 10px 26px rgba(2, 132, 199, 0.45);
+    cursor: pointer;
+    transform: translateY(120px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease, bottom 0.2s ease;
   }
-  .finish-btn:disabled { opacity: 0.5; cursor: default; }
+  .save-fab.visible {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .save-fab.above-timer {
+    bottom: 138px;
+  }
+  .save-fab:disabled {
+    opacity: 0.7;
+    cursor: default;
+  }
 
+  /* Floating Rest Timer */
   .rest-bar {
     position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
     width: calc(100% - 28px); max-width: 512px;
@@ -222,6 +258,7 @@
     cursor: pointer;
   }
 
+  /* Bottom Navigation Tabs */
   .bottom-nav {
     position: fixed; bottom: 0; left: 0; right: 0;
     background: rgba(11, 14, 20, 0.96);
@@ -245,6 +282,33 @@
     border-color: rgba(56, 189, 248, 0.35);
     color: var(--accent);
   }
+
+  /* Progress View */
+  .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .kpi-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 10px; text-align: center;
+  }
+  .kpi-val { font-size: 17px; font-weight: 900; color: var(--text); }
+  .kpi-lbl { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+
+  .lift-chips {
+    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 8px;
+    scrollbar-width: none;
+  }
+  .lift-chips::-webkit-scrollbar { display: none; }
+  .lift-chip {
+    white-space: nowrap; font-size: 12px; font-weight: 700;
+    padding: 6px 12px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer;
+  }
+  .lift-chip.active {
+    background: var(--accent-dim);
+    border-color: rgba(56,189,248,0.45);
+    color: var(--accent);
+  }
+
   .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
   .stat-box {
     background: var(--surface); border: 1px solid var(--border);
@@ -252,6 +316,50 @@
   }
   .stat-lbl { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
   .stat-num { font-size: 20px; font-weight: 900; margin-top: 4px; color: var(--accent); }
+
+  /* Calendar View */
+  .cal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 8px 10px; margin-bottom: 10px;
+  }
+  .cal-month-title { font-size: 16px; font-weight: 800; }
+  .cal-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 10px;
+  }
+  .cal-dow {
+    text-align: center; font-size: 10px; font-weight: 800;
+    color: var(--muted); padding-bottom: 4px; text-transform: uppercase;
+  }
+  .cal-cell {
+    aspect-ratio: 1 / 1.08;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: var(--surface-2);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    color: var(--muted);
+    position: relative;
+  }
+  .cal-cell.empty { background: transparent; }
+  .cal-cell.has-workout { cursor: pointer; color: var(--text); border-color: var(--border); }
+  .cal-cell.status-done { background: var(--green-dim); border-color: rgba(34,197,94,0.45); color: var(--green); }
+  .cal-cell.status-next { background: var(--accent-dim); border-color: rgba(56,189,248,0.55); color: var(--accent); }
+  .cal-cell.status-missed { background: var(--amber-dim); border-color: rgba(245,158,11,0.45); color: var(--amber); }
+  .cal-cell.status-upcoming { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+  .cal-dot {
+    font-size: 9px; font-weight: 800; margin-top: 2px; letter-spacing: 0.2px;
+  }
+  .legend-row {
+    display: flex; justify-content: space-around; flex-wrap: wrap; gap: 8px;
+    margin-top: 10px; font-size: 11px; color: var(--muted); font-weight: 600;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+
   .empty-state {
     text-align: center; padding: 40px 20px; color: var(--muted);
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
@@ -260,6 +368,7 @@
 </head>
 <body>
 <div class="app-shell">
+  <!-- WORKOUT VIEW -->
   <div id="view-workout">
     <div class="top-bar">
       <div class="brand-row">
@@ -287,23 +396,32 @@
     <div id="workoutContainer"></div>
   </div>
 
+  <!-- PROGRESS & 1RM VIEW -->
   <div id="view-progress" style="display:none; padding-top:14px;">
-    <div style="font-size:18px;font-weight:800;margin-bottom:12px;">Progress & Estimated 1RM</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-size:18px;font-weight:800;">Progress & 1RM</div>
+      <button class="sync-pill live" onclick="refreshFromSheet()">Refresh Data</button>
+    </div>
     <div id="progressContainer"></div>
   </div>
 
-  <div id="view-sync" style="display:none; padding-top:14px;">
-    <div style="font-size:18px;font-weight:800;margin-bottom:12px;">Google Sheets Sync</div>
-    <div class="ex-card">
-      <div style="font-weight:800;margin-bottom:6px;">Direct API Sync</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px;">
-        Connected directly to your Google Sheet via Apps Script JSON API. Any exercise changes, weight edits, or new monthly tabs pull automatically.
-      </div>
-      <button class="finish-btn" onclick="refreshFromSheet()">Pull Latest Schedule From Sheet</button>
+  <!-- CALENDAR / SCHEDULE VIEW -->
+  <div id="view-calendar" style="display:none; padding-top:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-size:18px;font-weight:800;">Workout Schedule</div>
+      <button class="sync-pill live" onclick="refreshFromSheet()">Sync Sheet</button>
     </div>
+    <div id="calendarContainer"></div>
   </div>
 </div>
 
+<!-- CONTEXTUAL SAVE FAB -->
+<button id="saveFab" class="save-fab" onclick="saveCurrentSession()">
+  <span>✓</span>
+  <span id="saveFabLabel">Save Changes</span>
+</button>
+
+<!-- FLOATING REST TIMER -->
 <div id="restBar" class="rest-bar">
   <div>
     <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;">Rest Timer</div>
@@ -317,11 +435,12 @@
   </div>
 </div>
 
+<!-- BOTTOM NAVIGATION TABS -->
 <div class="bottom-nav">
   <div class="bottom-inner">
     <button id="tab-workout" class="tab-btn active" onclick="switchTab('workout')">Workout</button>
     <button id="tab-progress" class="tab-btn" onclick="switchTab('progress')">Progress & 1RM</button>
-    <button id="tab-sync" class="tab-btn" onclick="switchTab('sync')">Sheets Sync</button>
+    <button id="tab-calendar" class="tab-btn" onclick="switchTab('calendar')">Schedule</button>
   </div>
 </div>
 
@@ -332,6 +451,10 @@
   let currentIdx = 0;
   let targetIdx = 0;
   let activeTab = 'workout';
+  let selectedLift = 'Back Squat';
+  let calYear = new Date().getFullYear();
+  let calMonth = new Date().getMonth();
+  let dirtyCount = 0;
   let restSeconds = 0;
   let restInterval = null;
 
@@ -398,13 +521,39 @@
     pill.className = 'sync-pill ' + (cls || '');
   }
 
+  function markDirty() {
+    dirtyCount++;
+    setSyncStatus('Unsaved Changes', 'dirty');
+    updateFabVisibility();
+  }
+
+  function clearDirty() {
+    dirtyCount = 0;
+    updateFabVisibility();
+  }
+
+  function updateFabVisibility() {
+    const fab = document.getElementById('saveFab');
+    const lbl = document.getElementById('saveFabLabel');
+    const restActive = document.getElementById('restBar').classList.contains('active');
+    const show = dirtyCount > 0 && activeTab === 'workout' && sessions.length > 0;
+
+    fab.classList.toggle('visible', show);
+    fab.classList.toggle('above-timer', restActive);
+    if (show) {
+      lbl.textContent = dirtyCount === 1 ? 'Save Change' : `Save Changes (${dirtyCount})`;
+    }
+  }
+
   function switchTab(tab) {
     activeTab = tab;
-    ['workout', 'progress', 'sync'].forEach(t => {
+    ['workout', 'progress', 'calendar'].forEach(t => {
       document.getElementById(`view-${t}`).style.display = t === tab ? 'block' : 'none';
       document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
     });
+    updateFabVisibility();
     if (tab === 'progress') renderProgress();
+    if (tab === 'calendar') renderCalendar();
   }
 
   async function refreshFromSheet() {
@@ -421,9 +570,16 @@
         localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
         targetIdx = findAutoTargetIndex(sessions);
         currentIdx = targetIdx;
+        if (sessions[targetIdx]) {
+          const [y, m] = sessions[targetIdx].date.split('-').map(Number);
+          calYear = y;
+          calMonth = m - 1;
+        }
+        clearDirty();
         setSyncStatus('Synced ✓', 'live');
         render();
         if (activeTab === 'progress') renderProgress();
+        if (activeTab === 'calendar') renderCalendar();
       }
     } catch (err) {
       const cached = localStorage.getItem('gymlog_cache');
@@ -444,6 +600,7 @@
     const next = currentIdx + delta;
     if (next >= 0 && next < sessions.length) {
       currentIdx = next;
+      clearDirty();
       render();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -451,13 +608,25 @@
 
   function jumpToTarget() {
     currentIdx = targetIdx;
+    clearDirty();
     render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function jumpToSessionIndex(idx) {
+    if (idx >= 0 && idx < sessions.length) {
+      currentIdx = idx;
+      clearDirty();
+      switchTab('workout');
+      render();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }
 
   function adjustWeight(exIdx, setIdx, delta) {
     const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
     st.weight = Math.max(0, +(st.weight + delta).toFixed(1));
+    markDirty();
     render();
   }
 
@@ -465,6 +634,7 @@
     const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
     const base = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 5);
     st.loggedReps = Math.max(0, base + delta);
+    markDirty();
     render();
   }
 
@@ -480,13 +650,16 @@
         startRest(cat === 'main' ? 150 : 90);
       }
     }
+    markDirty();
     render();
   }
 
   async function saveCurrentSession() {
     const session = sessions[currentIdx];
-    const btn = document.getElementById('finishBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving to Sheet...'; }
+    const fab = document.getElementById('saveFab');
+    const lbl = document.getElementById('saveFabLabel');
+    fab.disabled = true;
+    lbl.textContent = 'Saving...';
     setSyncStatus('Saving...', 'syncing');
 
     try {
@@ -505,11 +678,14 @@
         const foundIdx = sessions.findIndex(s => s.id === activeId);
         currentIdx = foundIdx !== -1 ? foundIdx : targetIdx;
       }
+      fab.disabled = false;
+      clearDirty();
       setSyncStatus('Saved ✓', 'live');
       render();
     } catch (err) {
+      fab.disabled = false;
+      updateFabVisibility();
       setSyncStatus('Save Failed', '');
-      if (btn) { btn.disabled = false; btn.textContent = `Save Workout to ${session.tab}`; }
       alert('Save failed: ' + err.message);
     }
   }
@@ -517,6 +693,7 @@
   function startRest(sec) {
     restSeconds = sec;
     document.getElementById('restBar').classList.add('active');
+    updateFabVisibility();
     updateRestClock();
     clearInterval(restInterval);
     restInterval = setInterval(() => {
@@ -535,6 +712,7 @@
     clearInterval(restInterval);
     restInterval = null;
     document.getElementById('restBar').classList.remove('active');
+    updateFabVisibility();
   }
 
   function updateRestClock() {
@@ -708,11 +886,7 @@
           ${rowsHtml}
         </div>
       `;
-    }).join('') + `
-      <button id="finishBtn" class="finish-btn" onclick="saveCurrentSession()">
-        Save Workout to ${s.tab}
-      </button>
-    `;
+    }).join('');
 
     pillStrip.innerHTML = ['main', 'accessory', 'cardio']
       .filter(cat => sectionState[cat].present)
@@ -722,45 +896,280 @@
       }).join('');
   }
 
+  function selectProgressLift(name) {
+    selectedLift = name;
+    renderProgress();
+  }
+
+  function buildSparklineSvg(points) {
+    if (points.length === 0) {
+      return `<div style="text-align:center;padding:24px 0;color:var(--muted);font-size:12px;">Complete at least 1 set of ${selectedLift} to chart your progression.</div>`;
+    }
+    if (points.length === 1) {
+      const p = points[0];
+      return `
+        <div style="text-align:center;padding:18px 0;">
+          <div style="font-size:24px;font-weight:900;color:var(--accent);">${p.e1rm} lb <span style="font-size:12px;color:var(--muted);">est. 1RM</span></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">First logged session: ${p.weight} lb × ${p.reps} reps on ${p.date}</div>
+        </div>
+      `;
+    }
+
+    const w = 320, h = 115, padX = 18, padY = 18;
+    const vals = points.map(p => p.e1rm);
+    const minV = Math.min(...vals) - 5;
+    const maxV = Math.max(...vals) + 5;
+    const span = Math.max(1, maxV - minV);
+
+    const coords = points.map((p, i) => {
+      const x = padX + (i / (points.length - 1)) * (w - padX * 2);
+      const y = h - padY - ((p.e1rm - minV) / span) * (h - padY * 2);
+      return { x, y, ...p };
+    });
+
+    const polyPoints = coords.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+    const areaPoints = `${coords[0].x.toFixed(1)},${h - padY} ${polyPoints} ${coords[coords.length - 1].x.toFixed(1)},${h - padY}`;
+    const dots = coords.map(c => `
+      <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="4" fill="#38bdf8" stroke="#0b0e14" stroke-width="1.5" />
+    `).join('');
+
+    const first = points[0];
+    const latest = points[points.length - 1];
+    const diff = latest.e1rm - first.e1rm;
+    const diffStr = diff >= 0 ? `+${diff} lb` : `${diff} lb`;
+
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+        <div>
+          <span style="font-size:22px;font-weight:900;color:var(--accent);">${latest.e1rm} lb</span>
+          <span style="font-size:11px;color:var(--muted);font-weight:700;"> Latest Est. 1RM</span>
+        </div>
+        <span style="font-size:12px;font-weight:800;color:${diff >= 0 ? 'var(--green)' : 'var(--amber)'};">${diffStr} since ${first.date.slice(5)}</span>
+      </div>
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:115px;overflow:visible;">
+        <defs>
+          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.28" />
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0" />
+          </linearGradient>
+        </defs>
+        <polygon points="${areaPoints}" fill="url(#areaGrad)" />
+        <polyline fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${polyPoints}" />
+        ${dots}
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px;">
+        <span>${first.date} (${first.weight}×${first.reps})</span>
+        <span>${latest.date} (${latest.weight}×${latest.reps})</span>
+      </div>
+    `;
+  }
+
   function renderProgress() {
     const box = document.getElementById('progressContainer');
     const lifts = ['Back Squat', 'Flat Bench', 'Barbell Row', 'Incline Bench', 'Deadlift'];
     const bestMap = {};
-    lifts.forEach(l => bestMap[l] = { weight: 0, reps: 0, e1rm: 0, date: '' });
+    const historyMap = {};
+    lifts.forEach(l => {
+      bestMap[l] = { weight: 0, reps: 0, e1rm: 0, date: '' };
+      historyMap[l] = [];
+    });
+
+    let completedWorkouts = 0;
+    let totalTonnage = 0;
+    let cardioMinutes = 0;
+    const accessoryBests = {};
 
     sessions.forEach(s => {
+      if (isSessionComplete(s)) completedWorkouts++;
+      let liftRank = 0;
+
       s.exercises.forEach(ex => {
-        if (!bestMap[ex.name]) return;
+        const cat = getExerciseCategory(ex, liftRank);
+        if (!ex.isCardio) liftRank++;
+
+        let sessionBestForLift = null;
+
         ex.sets.forEach(st => {
-          if (st.completed && st.weight > 0 && hasValue(st.loggedReps)) {
-            const r = Number(st.loggedReps);
+          if (!st.completed) return;
+          const r = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 0);
+
+          if (cat === 'cardio') {
+            cardioMinutes += r;
+          } else if (st.weight > 0) {
+            totalTonnage += st.weight * r;
+            if (cat === 'accessory') {
+              if (!accessoryBests[ex.name] || st.weight > accessoryBests[ex.name].weight) {
+                accessoryBests[ex.name] = { weight: st.weight, reps: r };
+              }
+            }
+          }
+
+          if (bestMap[ex.name] && st.weight > 0 && r > 0) {
             const est = Math.round(st.weight * (1 + r / 30));
             if (est > bestMap[ex.name].e1rm) {
               bestMap[ex.name] = { weight: st.weight, reps: r, e1rm: est, date: s.date };
             }
+            if (!sessionBestForLift || est > sessionBestForLift.e1rm) {
+              sessionBestForLift = { date: s.date, weight: st.weight, reps: r, e1rm: est };
+            }
           }
         });
+
+        if (sessionBestForLift && historyMap[ex.name]) {
+          historyMap[ex.name].push(sessionBestForLift);
+        }
       });
     });
 
-    box.innerHTML = `<div class="stat-grid">` + lifts.map(name => {
+    const tonnageLabel = totalTonnage >= 1000
+      ? `${(totalTonnage / 1000).toFixed(1)}k lb`
+      : `${Math.round(totalTonnage)} lb`;
+
+    const kpiHtml = `
+      <div class="kpi-row">
+        <div class="kpi-box">
+          <div class="kpi-val" style="color:var(--green);">${completedWorkouts}</div>
+          <div class="kpi-lbl">Workouts Done</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-val" style="color:var(--accent);">${tonnageLabel}</div>
+          <div class="kpi-lbl">Total Tonnage</div>
+        </div>
+        <div class="kpi-box">
+          <div class="kpi-val" style="color:var(--purple);">${cardioMinutes}m</div>
+          <div class="kpi-lbl">Cardio Logged</div>
+        </div>
+      </div>
+    `;
+
+    const chipsHtml = `<div class="lift-chips">` + lifts.map(l => `
+      <button class="lift-chip ${l === selectedLift ? 'active' : ''}" onclick="selectProgressLift('${l}')">${l}</button>
+    `).join('') + `</div>`;
+
+    const chartCardHtml = `
+      <div class="ex-card">
+        <div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">
+          ${selectedLift} Progression
+        </div>
+        ${buildSparklineSvg(historyMap[selectedLift] || [])}
+      </div>
+    `;
+
+    const mainCardsHtml = `<div class="sec-header">Main Lift Peak 1RMs</div><div class="stat-grid">` + lifts.map(name => {
       const b = bestMap[name];
       return `
-        <div class="stat-box">
+        <div class="stat-box" onclick="selectProgressLift('${name}')" style="cursor:pointer;">
           <div class="stat-lbl">${name}</div>
           <div class="stat-num">${b.e1rm ? b.e1rm + ' lb' : '—'}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:3px;">
-            ${b.e1rm ? `Best: ${b.weight} × ${b.reps} (${b.date})` : 'No logged sets yet'}
+            ${b.e1rm ? `Best: ${b.weight} × ${b.reps}` : 'No logged sets'}
           </div>
         </div>
       `;
     }).join('') + `</div>`;
+
+    const accNames = Object.keys(accessoryBests);
+    const accHtml = accNames.length ? `
+      <div class="sec-header">Accessory Top Weights</div>
+      <div class="stat-grid">
+        ${accNames.map(name => `
+          <div class="stat-box">
+            <div class="stat-lbl">${name}</div>
+            <div class="stat-num" style="color:var(--purple);">${accessoryBests[name].weight} lb</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px;">× ${accessoryBests[name].reps} reps</div>
+          </div>
+        `).join('')}
+      </div>
+    ` : '';
+
+    box.innerHTML = kpiHtml + chipsHtml + chartCardHtml + mainCardsHtml + accHtml;
+  }
+
+  function stepCalendarMonth(delta) {
+    calMonth += delta;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    const box = document.getElementById('calendarContainer');
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const sessionByDate = {};
+    sessions.forEach((s, idx) => { sessionByDate[s.date] = { s, idx }; });
+
+    const firstDow = new Date(calYear, calMonth, 1).getDay();
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const today = todayIso();
+
+    let monthTotal = 0;
+    let monthDone = 0;
+
+    let cellsHtml = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      .map(d => `<div class="cal-dow">${d}</div>`).join('');
+
+    for (let i = 0; i < firstDow; i++) {
+      cellsHtml += `<div class="cal-cell empty"></div>`;
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const entry = sessionByDate[iso];
+
+      if (!entry) {
+        cellsHtml += `<div class="cal-cell">${day}</div>`;
+        continue;
+      }
+
+      monthTotal++;
+      const complete = isSessionComplete(entry.s);
+      if (complete) monthDone++;
+
+      let statusCls = 'status-upcoming';
+      if (complete) statusCls = 'status-done';
+      else if (entry.idx === targetIdx || iso === today) statusCls = 'status-next';
+      else if (iso < today) statusCls = 'status-missed';
+
+      const shortSplit = entry.s.split.replace(/Workout\s*/i, 'W');
+
+      cellsHtml += `
+        <div class="cal-cell has-workout ${statusCls}" onclick="jumpToSessionIndex(${entry.idx})">
+          <span>${day}</span>
+          <span class="cal-dot">${complete ? '✓' : shortSplit}</span>
+        </div>
+      `;
+    }
+
+    const consistencyPct = monthTotal ? Math.round((monthDone / monthTotal) * 100) : 0;
+
+    box.innerHTML = `
+      <div class="cal-header">
+        <button class="nav-arrow" onclick="stepCalendarMonth(-1)">‹</button>
+        <div style="text-align:center;">
+          <div class="cal-month-title">${monthNames[calMonth]} ${calYear}</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:700;margin-top:2px;">
+            ${monthDone} / ${monthTotal} Workouts Completed (${consistencyPct}%)
+          </div>
+        </div>
+        <button class="nav-arrow" onclick="stepCalendarMonth(1)">›</button>
+      </div>
+      <div class="cal-grid">${cellsHtml}</div>
+      <div class="legend-row">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--green);"></span>Done</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--accent);"></span>Next Up</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--amber);"></span>Past Unlogged</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--surface-2);border:1px solid var(--border);"></span>Upcoming</div>
+      </div>
+    `;
   }
 
   window.addEventListener('DOMContentLoaded', refreshFromSheet);
+
   if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
-}
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
 </script>
 </body>
 </html>
