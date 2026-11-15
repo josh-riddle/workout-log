@@ -284,16 +284,21 @@
   }
 
   /* Progress View */
-  .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .kpi-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
   .kpi-box {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 14px; padding: 10px; text-align: center;
+    border-radius: 14px; padding: 10px 12px;
+    display: flex; justify-content: space-between; align-items: center;
   }
   .kpi-val { font-size: 17px; font-weight: 900; color: var(--text); }
-  .kpi-lbl { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+  .kpi-lbl { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; }
 
+  .chip-group-lbl {
+    font-size: 10px; font-weight: 800; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.6px; margin: 4px 2px 5px 2px;
+  }
   .lift-chips {
-    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 8px;
+    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 4px;
     scrollbar-width: none;
   }
   .lift-chips::-webkit-scrollbar { display: none; }
@@ -308,12 +313,20 @@
     border-color: rgba(56,189,248,0.45);
     color: var(--accent);
   }
+  .lift-chip.acc-chip.active {
+    background: var(--purple-dim);
+    border-color: rgba(167,139,250,0.5);
+    color: var(--purple);
+  }
 
   .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
   .stat-box {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 14px; padding: 12px;
+    transition: border-color 0.15s ease;
   }
+  .stat-box.selected-card { border-color: rgba(56,189,248,0.55); }
+  .stat-box.selected-acc-card { border-color: rgba(167,139,250,0.55); }
   .stat-lbl { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
   .stat-num { font-size: 20px; font-weight: 900; margin-top: 4px; color: var(--accent); }
 
@@ -399,7 +412,7 @@
   <!-- PROGRESS & 1RM VIEW -->
   <div id="view-progress" style="display:none; padding-top:14px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <div style="font-size:18px;font-weight:800;">Progress & 1RM</div>
+      <div style="font-size:18px;font-weight:800;">Progress & Insights</div>
       <button class="sync-pill live" onclick="refreshFromSheet()">Refresh Data</button>
     </div>
     <div id="progressContainer"></div>
@@ -515,13 +528,16 @@
     });
   }
 
+  function formatShortTon(lbs) {
+    return lbs >= 1000 ? `${(lbs / 1000).toFixed(1)}k lb` : `${Math.round(lbs)} lb`;
+  }
+
   function setSyncStatus(text, cls) {
     const pill = document.getElementById('syncPill');
     pill.textContent = text;
     pill.className = 'sync-pill ' + (cls || '');
   }
 
-  // Snapshot & diff-based dirty state so undoing a mistake hides the FAB cleanly
   function getComparableSets(s) {
     if (!s || !s.exercises) return [];
     const out = [];
@@ -935,7 +951,11 @@
     renderProgress();
   }
 
-  function buildSparklineSvg(points) {
+  function buildSparklineSvg(points, isAccessory) {
+    const strokeColor = isAccessory ? '#a78bfa' : '#38bdf8';
+    const textColor = isAccessory ? 'var(--purple)' : 'var(--accent)';
+    const metricLabel = isAccessory ? 'Session Vol' : 'Est. 1RM';
+
     if (points.length === 0) {
       return `<div style="text-align:center;padding:24px 0;color:var(--muted);font-size:12px;">Complete at least 1 set of ${selectedLift} to chart your progression.</div>`;
     }
@@ -943,75 +963,78 @@
       const p = points[0];
       return `
         <div style="text-align:center;padding:18px 0;">
-          <div style="font-size:24px;font-weight:900;color:var(--accent);">${p.e1rm} lb <span style="font-size:12px;color:var(--muted);">est. 1RM</span></div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px;">First logged session: ${p.weight} lb × ${p.reps} reps on ${p.date}</div>
+          <div style="font-size:24px;font-weight:900;color:${textColor};">${p.metric} lb <span style="font-size:12px;color:var(--muted);">${metricLabel}</span></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">First logged session: ${p.weight > 0 ? `${p.weight} lb × ${p.reps} reps` : `${p.reps} reps`} on ${p.date}</div>
         </div>
       `;
     }
 
     const w = 320, h = 115, padX = 18, padY = 18;
-    const vals = points.map(p => p.e1rm);
+    const vals = points.map(p => p.metric);
     const minV = Math.min(...vals) - 5;
     const maxV = Math.max(...vals) + 5;
     const span = Math.max(1, maxV - minV);
 
     const coords = points.map((p, i) => {
       const x = padX + (i / (points.length - 1)) * (w - padX * 2);
-      const y = h - padY - ((p.e1rm - minV) / span) * (h - padY * 2);
+      const y = h - padY - ((p.metric - minV) / span) * (h - padY * 2);
       return { x, y, ...p };
     });
 
     const polyPoints = coords.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
     const areaPoints = `${coords[0].x.toFixed(1)},${h - padY} ${polyPoints} ${coords[coords.length - 1].x.toFixed(1)},${h - padY}`;
     const dots = coords.map(c => `
-      <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="4" fill="#38bdf8" stroke="#0b0e14" stroke-width="1.5" />
+      <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="4" fill="${strokeColor}" stroke="#0b0e14" stroke-width="1.5" />
     `).join('');
 
     const first = points[0];
     const latest = points[points.length - 1];
-    const diff = latest.e1rm - first.e1rm;
+    const diff = latest.metric - first.metric;
     const diffStr = diff >= 0 ? `+${diff} lb` : `${diff} lb`;
 
     return `
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
         <div>
-          <span style="font-size:22px;font-weight:900;color:var(--accent);">${latest.e1rm} lb</span>
-          <span style="font-size:11px;color:var(--muted);font-weight:700;"> Latest Est. 1RM</span>
+          <span style="font-size:22px;font-weight:900;color:${textColor};">${latest.metric} lb</span>
+          <span style="font-size:11px;color:var(--muted);font-weight:700;"> Latest ${metricLabel}</span>
         </div>
         <span style="font-size:12px;font-weight:800;color:${diff >= 0 ? 'var(--green)' : 'var(--amber)'};">${diffStr} since ${first.date.slice(5)}</span>
       </div>
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:115px;overflow:visible;">
         <defs>
           <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.28" />
-            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0" />
+            <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.28" />
+            <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0.0" />
           </linearGradient>
         </defs>
         <polygon points="${areaPoints}" fill="url(#areaGrad)" />
-        <polyline fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${polyPoints}" />
+        <polyline fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${polyPoints}" />
         ${dots}
       </svg>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px;">
-        <span>${first.date} (${first.weight}×${first.reps})</span>
-        <span>${latest.date} (${latest.weight}×${latest.reps})</span>
+        <span>${first.date} (${first.weight > 0 ? `${first.weight}×${first.reps}` : `${first.reps} reps`})</span>
+        <span>${latest.date} (${latest.weight > 0 ? `${latest.weight}×${latest.reps}` : `${latest.reps} reps`})</span>
       </div>
     `;
   }
 
   function renderProgress() {
     const box = document.getElementById('progressContainer');
-    const lifts = ['Back Squat', 'Flat Bench', 'Barbell Row', 'Incline Bench', 'Deadlift'];
-    const bestMap = {};
+    const mainLifts = ['Back Squat', 'Flat Bench', 'Barbell Row', 'Incline Bench', 'Deadlift'];
+    const mainBestMap = {};
     const historyMap = {};
-    lifts.forEach(l => {
-      bestMap[l] = { weight: 0, reps: 0, e1rm: 0, date: '' };
+    const accessorySet = new Set();
+    const accessoryStats = {};
+
+    mainLifts.forEach(l => {
+      mainBestMap[l] = { weight: 0, reps: 0, e1rm: 0, date: '' };
       historyMap[l] = [];
     });
 
     let completedWorkouts = 0;
-    let totalTonnage = 0;
+    let compoundTonnage = 0;
+    let accessoryTonnage = 0;
     let cardioMinutes = 0;
-    const accessoryBests = {};
 
     sessions.forEach(s => {
       if (isSessionComplete(s)) completedWorkouts++;
@@ -1021,7 +1044,17 @@
         const cat = getExerciseCategory(ex, liftRank);
         if (!ex.isCardio) liftRank++;
 
-        let sessionBestForLift = null;
+        if (cat === 'accessory') {
+          accessorySet.add(ex.name);
+          if (!accessoryStats[ex.name]) {
+            accessoryStats[ex.name] = { bestWeight: 0, bestReps: 0, totalVol: 0, totalReps: 0 };
+          }
+          if (!historyMap[ex.name]) historyMap[ex.name] = [];
+        }
+
+        let sessionMainBest = null;
+        let sessionAccVol = 0;
+        let sessionAccTop = { weight: 0, reps: 0 };
 
         ex.sets.forEach(st => {
           if (!st.completed) return;
@@ -1029,70 +1062,121 @@
 
           if (cat === 'cardio') {
             cardioMinutes += r;
-          } else if (st.weight > 0) {
-            totalTonnage += st.weight * r;
-            if (cat === 'accessory') {
-              if (!accessoryBests[ex.name] || st.weight > accessoryBests[ex.name].weight) {
-                accessoryBests[ex.name] = { weight: st.weight, reps: r };
+          } else if (cat === 'main') {
+            if (st.weight > 0) compoundTonnage += st.weight * r;
+            if (mainBestMap[ex.name] && st.weight > 0 && r > 0) {
+              const est = Math.round(st.weight * (1 + r / 30));
+              if (est > mainBestMap[ex.name].e1rm) {
+                mainBestMap[ex.name] = { weight: st.weight, reps: r, e1rm: est, date: s.date };
+              }
+              if (!sessionMainBest || est > sessionMainBest.metric) {
+                sessionMainBest = { date: s.date, weight: st.weight, reps: r, metric: est };
               }
             }
-          }
+          } else if (cat === 'accessory') {
+            const setVol = st.weight > 0 ? st.weight * r : r;
+            if (st.weight > 0) accessoryTonnage += setVol;
+            sessionAccVol += setVol;
+            accessoryStats[ex.name].totalVol += (st.weight > 0 ? st.weight * r : 0);
+            accessoryStats[ex.name].totalReps += r;
 
-          if (bestMap[ex.name] && st.weight > 0 && r > 0) {
-            const est = Math.round(st.weight * (1 + r / 30));
-            if (est > bestMap[ex.name].e1rm) {
-              bestMap[ex.name] = { weight: st.weight, reps: r, e1rm: est, date: s.date };
+            if (st.weight > accessoryStats[ex.name].bestWeight ||
+               (st.weight === accessoryStats[ex.name].bestWeight && r > accessoryStats[ex.name].bestReps)) {
+              accessoryStats[ex.name].bestWeight = st.weight;
+              accessoryStats[ex.name].bestReps = r;
             }
-            if (!sessionBestForLift || est > sessionBestForLift.e1rm) {
-              sessionBestForLift = { date: s.date, weight: st.weight, reps: r, e1rm: est };
+            if (st.weight > sessionAccTop.weight ||
+               (st.weight === sessionAccTop.weight && r > sessionAccTop.reps)) {
+              sessionAccTop = { weight: st.weight, reps: r };
             }
           }
         });
 
-        if (sessionBestForLift && historyMap[ex.name]) {
-          historyMap[ex.name].push(sessionBestForLift);
+        if (sessionMainBest && historyMap[ex.name]) {
+          historyMap[ex.name].push(sessionMainBest);
+        }
+        if (cat === 'accessory' && sessionAccVol > 0) {
+          historyMap[ex.name].push({
+            date: s.date,
+            weight: sessionAccTop.weight,
+            reps: sessionAccTop.reps,
+            metric: Math.round(sessionAccVol)
+          });
         }
       });
     });
 
-    const tonnageLabel = totalTonnage >= 1000
-      ? `${(totalTonnage / 1000).toFixed(1)}k lb`
-      : `${Math.round(totalTonnage)} lb`;
+    const accessoryNames = Array.from(accessorySet);
+    const isSelectedAccessory = accessoryNames.includes(selectedLift);
 
     const kpiHtml = `
       <div class="kpi-row">
         <div class="kpi-box">
-          <div class="kpi-val" style="color:var(--green);">${completedWorkouts}</div>
-          <div class="kpi-lbl">Workouts Done</div>
+          <div>
+            <div class="kpi-lbl">Workouts Done</div>
+            <div class="kpi-val" style="color:var(--green);margin-top:2px;">${completedWorkouts}</div>
+          </div>
+          <span style="font-size:18px;">✓</span>
         </div>
         <div class="kpi-box">
-          <div class="kpi-val" style="color:var(--accent);">${tonnageLabel}</div>
-          <div class="kpi-lbl">Total Tonnage</div>
+          <div>
+            <div class="kpi-lbl">Cardio Logged</div>
+            <div class="kpi-val" style="color:var(--green);margin-top:2px;">${cardioMinutes} min</div>
+          </div>
+          <span style="font-size:16px;">⏱</span>
         </div>
         <div class="kpi-box">
-          <div class="kpi-val" style="color:var(--purple);">${cardioMinutes}m</div>
-          <div class="kpi-lbl">Cardio Logged</div>
+          <div>
+            <div class="kpi-lbl">Compound Vol</div>
+            <div class="kpi-val" style="color:var(--accent);margin-top:2px;">${formatShortTon(compoundTonnage)}</div>
+          </div>
+        </div>
+        <div class="kpi-box">
+          <div>
+            <div class="kpi-lbl">Accessory Vol</div>
+            <div class="kpi-val" style="color:var(--purple);margin-top:2px;">${formatShortTon(accessoryTonnage)}</div>
+          </div>
         </div>
       </div>
     `;
 
-    const chipsHtml = `<div class="lift-chips">` + lifts.map(l => `
-      <button class="lift-chip ${l === selectedLift ? 'active' : ''}" onclick="selectProgressLift('${l}')">${l}</button>
-    `).join('') + `</div>`;
+    const mainChipsHtml = `
+      <div class="chip-group-lbl">Main Compounds</div>
+      <div class="lift-chips">
+        ${mainLifts.map(l => `
+          <button class="lift-chip ${l === selectedLift ? 'active' : ''}" onclick="selectProgressLift('${l.replace(/'/g, "\\'")}')">${l}</button>
+        `).join('')}
+      </div>
+    `;
+
+    const accChipsHtml = accessoryNames.length ? `
+      <div class="chip-group-lbl">Accessories</div>
+      <div class="lift-chips" style="margin-bottom:8px;">
+        ${accessoryNames.map(l => `
+          <button class="lift-chip acc-chip ${l === selectedLift ? 'active' : ''}" onclick="selectProgressLift('${l.replace(/'/g, "\\'")}')">${l}</button>
+        `).join('')}
+      </div>
+    ` : '';
 
     const chartCardHtml = `
       <div class="ex-card">
-        <div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">
-          ${selectedLift} Progression
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;">
+            ${selectedLift} Progression
+          </div>
+          <span class="cat-tag ${isSelectedAccessory ? 'cat-acc' : 'cat-main'}">
+            ${isSelectedAccessory ? 'Session Volume' : 'Est. 1RM'}
+          </span>
         </div>
-        ${buildSparklineSvg(historyMap[selectedLift] || [])}
+        ${buildSparklineSvg(historyMap[selectedLift] || [], isSelectedAccessory)}
       </div>
     `;
 
-    const mainCardsHtml = `<div class="sec-header">Main Lift Peak 1RMs</div><div class="stat-grid">` + lifts.map(name => {
-      const b = bestMap[name];
+    const mainCardsHtml = `<div class="sec-header">Main Lift Peak 1RMs</div><div class="stat-grid">` + mainLifts.map(name => {
+      const b = mainBestMap[name];
+      const isSel = name === selectedLift;
       return `
-        <div class="stat-box" onclick="selectProgressLift('${name}')" style="cursor:pointer;">
+        <div class="stat-box ${isSel ? 'selected-card' : ''}" onclick="selectProgressLift('${name}')" style="cursor:pointer;">
           <div class="stat-lbl">${name}</div>
           <div class="stat-num">${b.e1rm ? b.e1rm + ' lb' : '—'}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:3px;">
@@ -1102,21 +1186,31 @@
       `;
     }).join('') + `</div>`;
 
-    const accNames = Object.keys(accessoryBests);
-    const accHtml = accNames.length ? `
-      <div class="sec-header">Accessory Top Weights</div>
+    const accHtml = accessoryNames.length ? `
+      <div class="sec-header">Accessory Insights</div>
       <div class="stat-grid">
-        ${accNames.map(name => `
-          <div class="stat-box">
-            <div class="stat-lbl">${name}</div>
-            <div class="stat-num" style="color:var(--purple);">${accessoryBests[name].weight} lb</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:3px;">× ${accessoryBests[name].reps} reps</div>
-          </div>
-        `).join('')}
+        ${accessoryNames.map(name => {
+          const st = accessoryStats[name];
+          const isSel = name === selectedLift;
+          const hasLogs = st.totalReps > 0;
+          const topHeadline = !hasLogs
+            ? '—'
+            : (st.bestWeight > 0 ? `${st.bestWeight} lb × ${st.bestReps}` : `${st.bestReps} reps`);
+          const subLine = !hasLogs
+            ? 'No logged sets'
+            : (st.totalVol > 0 ? `Total Vol: ${formatShortTon(st.totalVol)}` : `Total Reps: ${st.totalReps}`);
+          return `
+            <div class="stat-box ${isSel ? 'selected-acc-card' : ''}" onclick="selectProgressLift('${name.replace(/'/g, "\\'")}')" style="cursor:pointer;">
+              <div class="stat-lbl">${name}</div>
+              <div class="stat-num" style="color:var(--purple);">${topHeadline}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:3px;">${subLine}</div>
+            </div>
+          `;
+        }).join('')}
       </div>
     ` : '';
 
-    box.innerHTML = kpiHtml + chipsHtml + chartCardHtml + mainCardsHtml + accHtml;
+    box.innerHTML = kpiHtml + mainChipsHtml + accChipsHtml + chartCardHtml + mainCardsHtml + accHtml;
   }
 
   function stepCalendarMonth(delta) {
