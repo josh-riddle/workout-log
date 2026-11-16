@@ -384,6 +384,7 @@
     font-size: 13px; font-weight: 700;
     color: var(--muted);
     position: relative;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
   }
   .cal-cell.empty { background: transparent; }
   .cal-cell.has-workout { cursor: pointer; color: var(--text); border-color: var(--border); }
@@ -391,6 +392,11 @@
   .cal-cell.status-next { background: var(--accent-dim); border-color: rgba(56,189,248,0.55); color: var(--accent); }
   .cal-cell.status-missed { background: var(--amber-dim); border-color: rgba(245,158,11,0.45); color: var(--amber); }
   .cal-cell.status-upcoming { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+  .cal-cell.selected-day {
+    outline: 2px solid #f8fafc;
+    outline-offset: -2px;
+    transform: scale(1.04);
+  }
   .cal-dot {
     font-size: 9px; font-weight: 800; margin-top: 2px; letter-spacing: 0.2px;
   }
@@ -400,6 +406,53 @@
   }
   .legend-item { display: flex; align-items: center; gap: 5px; }
   .legend-swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* Calendar Selected Workout Preview Card */
+  .cal-preview-card {
+    margin-top: 14px;
+    background: var(--surface);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    border-radius: 16px;
+    padding: 14px;
+    animation: slideFadeIn 0.18s ease-out;
+  }
+  @keyframes slideFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .preview-top {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 8px; margin-bottom: 10px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .preview-ex-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(40, 50, 68, 0.5);
+    gap: 10px;
+  }
+  .preview-ex-row:last-of-type { border-bottom: none; }
+  .preview-ex-left { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .preview-ex-name { font-size: 13px; font-weight: 800; color: var(--text); }
+  .preview-ex-right {
+    font-size: 12px; font-weight: 700; color: var(--muted);
+    text-align: right; white-space: nowrap;
+  }
+  .preview-actions {
+    display: flex; gap: 8px; margin-top: 12px;
+  }
+  .preview-open-btn {
+    flex: 1; padding: 9px 12px;
+    background: var(--accent-dim); color: var(--accent);
+    border: 1px solid rgba(56,189,248,0.4); border-radius: 10px;
+    font-size: 12px; font-weight: 800; cursor: pointer;
+  }
+  .preview-close-btn {
+    padding: 9px 14px;
+    background: var(--surface-2); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 10px;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+  }
 
   .empty-state {
     text-align: center; padding: 40px 20px; color: var(--muted);
@@ -498,6 +551,7 @@
   let expandedCardName = null;
   let calYear = new Date().getFullYear();
   let calMonth = new Date().getMonth();
+  let selectedCalendarIdx = null;
   let savedSnapshot = '';
   let restSeconds = 0;
   let restInterval = null;
@@ -608,26 +662,26 @@
   }
 
   function syncDirtyState() {
-  const diffs = getModifiedSetCount();
-  const fab = document.getElementById('saveFab');
-  const lbl = document.getElementById('saveFabLabel');
-  const restActive = document.getElementById('restBar').classList.contains('active');
-  const show = diffs > 0 && activeTab === 'workout' && sessions.length > 0;
+    const diffs = getModifiedSetCount();
+    const fab = document.getElementById('saveFab');
+    const lbl = document.getElementById('saveFabLabel');
+    const restActive = document.getElementById('restBar').classList.contains('active');
+    const show = diffs > 0 && activeTab === 'workout' && sessions.length > 0;
 
-  fab.classList.toggle('visible', show);
-  fab.classList.toggle('above-timer', restActive);
+    fab.classList.toggle('visible', show);
+    fab.classList.toggle('above-timer', restActive);
 
-  if (show) {
-    lbl.textContent = diffs === 1 ? 'Save 1 Set' : `Save ${diffs} Sets`;
-    setSyncStatus('Unsaved Changes', 'dirty');
-  } else if (sessions.length > 0) {
-    if (isOffline) {
-      setSyncStatus('Cached (Offline)', '');
-    } else {
-      setSyncStatus('Synced ✓', 'live');
+    if (show) {
+      lbl.textContent = diffs === 1 ? 'Save 1 Set' : `Save ${diffs} Sets`;
+      setSyncStatus('Unsaved Changes', 'dirty');
+    } else if (sessions.length > 0) {
+      if (isOffline) {
+        setSyncStatus('Cached (Offline)', '');
+      } else {
+        setSyncStatus('Synced ✓', 'live');
+      }
     }
   }
-}
 
   function switchTab(tab) {
     activeTab = tab;
@@ -641,55 +695,61 @@
   }
 
   async function refreshFromSheet(isRetry = false) {
-  if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
-    setSyncStatus('Missing URL', '');
-    return;
-  }
-  setSyncStatus('Syncing...', 'syncing');
-  try {
-    const resp = await fetch(SCRIPT_URL, { redirect: 'follow', cache: 'no-store' });
-    const res = await resp.json();
-    if (res && res.sessions) {
-      isOffline = false;
-      sessions = res.sessions;
-      if (res.aiInsights) {
-        aiInsights = res.aiInsights;
-        localStorage.setItem('gymlog_ai_cache', JSON.stringify(aiInsights));
-      }
-      localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
-      targetIdx = findAutoTargetIndex(sessions);
-      currentIdx = targetIdx;
-      if (sessions[targetIdx]) {
-        const [y, m] = sessions[targetIdx].date.split('-').map(Number);
-        calYear = y;
-        calMonth = m - 1;
-      }
-      captureSavedSnapshot();
-      render();
-      if (activeTab === 'progress') renderProgress();
-      if (activeTab === 'calendar') renderCalendar();
-    }
-  } catch (err) {
-    if (!isRetry) {
-      setTimeout(() => refreshFromSheet(true), 1200);
+    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+      setSyncStatus('Missing URL', '');
       return;
     }
-    isOffline = true;
-    const cached = localStorage.getItem('gymlog_cache');
-    const cachedAi = localStorage.getItem('gymlog_ai_cache');
-    if (cachedAi) aiInsights = JSON.parse(cachedAi);
-    if (cached) {
-      sessions = JSON.parse(cached);
-      targetIdx = findAutoTargetIndex(sessions);
-      currentIdx = targetIdx;
-      captureSavedSnapshot();
-      setSyncStatus('Cached (Offline)', '');
-      render();
-    } else {
-      setSyncStatus('Sync Error', '');
+    setSyncStatus('Syncing...', 'syncing');
+    try {
+      const resp = await fetch(SCRIPT_URL, { redirect: 'follow', cache: 'no-store' });
+      const res = await resp.json();
+      if (res && res.sessions) {
+        isOffline = false;
+        sessions = res.sessions;
+        if (res.aiInsights) {
+          aiInsights = res.aiInsights;
+          localStorage.setItem('gymlog_ai_cache', JSON.stringify(aiInsights));
+        }
+        localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
+        targetIdx = findAutoTargetIndex(sessions);
+        currentIdx = targetIdx;
+        if (selectedCalendarIdx === null) {
+          selectedCalendarIdx = targetIdx;
+        }
+        if (sessions[targetIdx]) {
+          const [y, m] = sessions[targetIdx].date.split('-').map(Number);
+          calYear = y;
+          calMonth = m - 1;
+        }
+        captureSavedSnapshot();
+        render();
+        if (activeTab === 'progress') renderProgress();
+        if (activeTab === 'calendar') renderCalendar();
+      }
+    } catch (err) {
+      if (!isRetry) {
+        setTimeout(() => refreshFromSheet(true), 1200);
+        return;
+      }
+      isOffline = true;
+      const cached = localStorage.getItem('gymlog_cache');
+      const cachedAi = localStorage.getItem('gymlog_ai_cache');
+      if (cachedAi) aiInsights = JSON.parse(cachedAi);
+      if (cached) {
+        sessions = JSON.parse(cached);
+        targetIdx = findAutoTargetIndex(sessions);
+        currentIdx = targetIdx;
+        if (selectedCalendarIdx === null) {
+          selectedCalendarIdx = targetIdx;
+        }
+        captureSavedSnapshot();
+        setSyncStatus('Cached (Offline)', '');
+        render();
+      } else {
+        setSyncStatus('Sync Error', '');
+      }
     }
   }
-}
 
   async function forceRefreshAiInsights(e) {
     if (e) e.stopPropagation();
@@ -738,6 +798,11 @@
       render();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  }
+
+  function selectCalendarSession(idx) {
+    selectedCalendarIdx = (selectedCalendarIdx === idx) ? null : idx;
+    renderCalendar();
   }
 
   function adjustWeight(exIdx, setIdx, delta) {
@@ -790,6 +855,7 @@
       });
       const res = await resp.json();
       if (res && res.sessions) {
+        isOffline = false;
         const activeId = session.id;
         sessions = res.sessions;
         localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
@@ -798,7 +864,6 @@
         currentIdx = foundIdx !== -1 ? foundIdx : targetIdx;
       }
       fab.disabled = false;
-      isOffline = false;
       captureSavedSnapshot();
       render();
     } catch (err) {
@@ -1220,7 +1285,7 @@
 
     const bullets = (aiInsights && Array.isArray(aiInsights.bullets) && aiInsights.bullets.length)
       ? aiInsights.bullets
-      : ['Nightly AI Coach brief updates automatically at 9:00 PM on training days. Tap Refresh to generate now.'];
+      : ['Nightly AI Coach brief updates automatically at 9:00 PM on training days. Tap Update Now to generate immediately.'];
     const updatedLabel = (aiInsights && aiInsights.updatedAt) ? `Updated: ${aiInsights.updatedAt}` : 'Scheduled: 9:00 PM Daily';
 
     const aiCardHtml = `
@@ -1341,6 +1406,83 @@
     renderCalendar();
   }
 
+  function buildCalendarPreviewHtml() {
+    if (selectedCalendarIdx === null || !sessions[selectedCalendarIdx]) {
+      return `<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:12px;">Tap any highlighted workout date above to preview its exercises.</div>`;
+    }
+
+    const s = sessions[selectedCalendarIdx];
+    const today = todayIso();
+    const complete = isSessionComplete(s);
+    const started = isSessionStarted(s);
+
+    let badgeHtml = '';
+    if (complete) badgeHtml = `<span class="badge badge-done">Completed ✓</span>`;
+    else if (s.date === today || selectedCalendarIdx === targetIdx) badgeHtml = `<span class="badge badge-next">Next Up</span>`;
+    else if (s.date < today) badgeHtml = `<span class="badge badge-missed">${started ? 'Partial Past' : 'Past Unlogged'}</span>`;
+    else badgeHtml = `<span class="badge badge-upcoming">Upcoming</span>`;
+
+    let liftRank = 0;
+    const exRowsHtml = s.exercises.map(ex => {
+      const cat = getExerciseCategory(ex, liftRank);
+      if (!ex.isCardio) liftRank++;
+
+      const tagHtml = cat === 'main'
+        ? `<span class="cat-tag cat-main">Main</span>`
+        : cat === 'accessory'
+          ? `<span class="cat-tag cat-acc">Acc</span>`
+          : `<span class="cat-tag cat-cardio">Cardio</span>`;
+
+      const doneCount = ex.sets.filter(st => st.completed).length;
+      const totalCount = ex.sets.length;
+
+      let summaryRight = '';
+      if (cat === 'cardio') {
+        const mins = ex.sets.reduce((acc, st) => acc + (hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 15)), 0);
+        summaryRight = `${mins} min`;
+      } else {
+        const topWeight = Math.max(...ex.sets.map(st => st.weight || 0));
+        const sampleReps = ex.sets[ex.sets.length - 1]?.goal || 5;
+        summaryRight = topWeight > 0
+          ? `${totalCount}×${sampleReps} • Top ${topWeight} lb`
+          : `${totalCount} sets • BW`;
+      }
+
+      if (doneCount > 0 && doneCount < totalCount) {
+        summaryRight += ` (${doneCount}/${totalCount})`;
+      } else if (doneCount === totalCount && totalCount > 0) {
+        summaryRight += ` ✓`;
+      }
+
+      return `
+        <div class="preview-ex-row">
+          <div class="preview-ex-left">
+            <span class="preview-ex-name">${ex.name}</span>
+            ${tagHtml}
+          </div>
+          <div class="preview-ex-right">${summaryRight}</div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="cal-preview-card">
+        <div class="preview-top">
+          <div>
+            <div style="font-size:15px;font-weight:800;">${formatDisplayDate(s.date)}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--accent);margin-top:2px;">${s.split} <span style="color:var(--muted);font-weight:600;">(${s.tab})</span></div>
+          </div>
+          ${badgeHtml}
+        </div>
+        ${exRowsHtml}
+        <div class="preview-actions">
+          <button class="preview-open-btn" onclick="jumpToSessionIndex(${selectedCalendarIdx})">Open in Logger →</button>
+          <button class="preview-close-btn" onclick="selectCalendarSession(${selectedCalendarIdx})">Close</button>
+        </div>
+      </div>
+    `;
+  }
+
   function renderCalendar() {
     const box = document.getElementById('calendarContainer');
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -1381,10 +1523,11 @@
       else if (entry.idx === targetIdx || iso === today) statusCls = 'status-next';
       else if (iso < today) statusCls = 'status-missed';
 
+      const isSelected = entry.idx === selectedCalendarIdx;
       const shortSplit = entry.s.split.replace(/Workout\s*/i, 'W');
 
       cellsHtml += `
-        <div class="cal-cell has-workout ${statusCls}" onclick="jumpToSessionIndex(${entry.idx})">
+        <div class="cal-cell has-workout ${statusCls} ${isSelected ? 'selected-day' : ''}" onclick="selectCalendarSession(${entry.idx})">
           <span>${day}</span>
           <span class="cal-dot">${complete ? '✓' : shortSplit}</span>
         </div>
@@ -1411,6 +1554,7 @@
         <div class="legend-item"><span class="legend-swatch" style="background:var(--amber);"></span>Past Unlogged</div>
         <div class="legend-item"><span class="legend-swatch" style="background:var(--surface-2);border:1px solid var(--border);"></span>Upcoming</div>
       </div>
+      ${buildCalendarPreviewHtml()}
     `;
   }
 
