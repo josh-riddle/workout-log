@@ -467,7 +467,7 @@
     <div class="top-bar">
       <div class="brand-row">
         <div class="brand-title">Gym Log</div>
-        <button id="syncPill" class="sync-pill" onclick="refreshFromSheet()">Connecting...</button>
+        <button id="syncPill" class="sync-pill" onclick="refreshFromSheet(false, true)">Connecting...</button>
       </div>
       <div class="day-nav">
         <button id="prevBtn" class="nav-arrow" onclick="stepDay(-1)">‹</button>
@@ -494,7 +494,7 @@
   <div id="view-progress" style="display:none; padding-top:14px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div style="font-size:18px;font-weight:800;">Progress & Insights</div>
-      <button class="sync-pill live" onclick="refreshFromSheet()">Refresh Data</button>
+      <button class="sync-pill live" onclick="refreshFromSheet(false, true)">Refresh Data</button>
     </div>
     <div id="progressContainer"></div>
   </div>
@@ -503,7 +503,7 @@
   <div id="view-calendar" style="display:none; padding-top:14px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div style="font-size:18px;font-weight:800;">Workout Schedule</div>
-      <button class="sync-pill live" onclick="refreshFromSheet()">Sync Sheet</button>
+      <button class="sync-pill live" onclick="refreshFromSheet(false, true)">Sync Sheet</button>
     </div>
     <div id="calendarContainer"></div>
   </div>
@@ -547,6 +547,7 @@
   let refreshingInsights = false;
   let currentIdx = 0;
   let targetIdx = 0;
+  let userNavigated = false;
   let activeTab = 'workout';
   let expandedCardName = null;
   let calYear = new Date().getFullYear();
@@ -694,33 +695,83 @@
     if (tab === 'calendar') renderCalendar();
   }
 
-  async function refreshFromSheet(isRetry = false) {
+  function hydrateFromLocalCache() {
+    try {
+      const cachedAi = localStorage.getItem('gymlog_ai_cache');
+      if (cachedAi) aiInsights = JSON.parse(cachedAi);
+
+      const cached = localStorage.getItem('gymlog_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          sessions = parsed;
+          targetIdx = findAutoTargetIndex(sessions);
+          currentIdx = targetIdx;
+          if (selectedCalendarIdx === null) {
+            selectedCalendarIdx = targetIdx;
+          }
+          if (sessions[targetIdx]) {
+            const [y, m] = sessions[targetIdx].date.split('-').map(Number);
+            calYear = y;
+            calMonth = m - 1;
+          }
+          captureSavedSnapshot();
+          render();
+        }
+      }
+    } catch (e) {}
+  }
+
+  async function refreshFromSheet(isRetry = false, forceBypass = false) {
     if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
       setSyncStatus('Missing URL', '');
       return;
     }
-    setSyncStatus('Syncing...', 'syncing');
+    if (getModifiedSetCount() === 0) {
+      setSyncStatus('Syncing...', 'syncing');
+    }
+
     try {
-      const resp = await fetch(SCRIPT_URL, { redirect: 'follow', cache: 'no-store' });
+      const sep = SCRIPT_URL.includes('?') ? '&' : '?';
+      const fetchUrl = forceBypass ? `${SCRIPT_URL}${sep}force=1` : SCRIPT_URL;
+      const resp = await fetch(fetchUrl, { redirect: 'follow', cache: 'no-store' });
       const res = await resp.json();
+
       if (res && res.sessions) {
         isOffline = false;
-        sessions = res.sessions;
         if (res.aiInsights) {
           aiInsights = res.aiInsights;
           localStorage.setItem('gymlog_ai_cache', JSON.stringify(aiInsights));
         }
+
+        // Preserve any unsaved user edits currently in progress on screen
+        if (getModifiedSetCount() > 0 && sessions[currentIdx]) {
+          localStorage.setItem('gymlog_cache', JSON.stringify(res.sessions));
+          syncDirtyState();
+          return;
+        }
+
+        const activeId = sessions[currentIdx] ? sessions[currentIdx].id : null;
+        sessions = res.sessions;
         localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
         targetIdx = findAutoTargetIndex(sessions);
-        currentIdx = targetIdx;
+
+        if (userNavigated && activeId) {
+          const foundIdx = sessions.findIndex(s => s.id === activeId);
+          currentIdx = foundIdx !== -1 ? foundIdx : targetIdx;
+        } else {
+          currentIdx = targetIdx;
+        }
+
         if (selectedCalendarIdx === null) {
           selectedCalendarIdx = targetIdx;
         }
-        if (sessions[targetIdx]) {
+        if (!userNavigated && sessions[targetIdx]) {
           const [y, m] = sessions[targetIdx].date.split('-').map(Number);
           calYear = y;
           calMonth = m - 1;
         }
+
         captureSavedSnapshot();
         render();
         if (activeTab === 'progress') renderProgress();
@@ -728,23 +779,12 @@
       }
     } catch (err) {
       if (!isRetry) {
-        setTimeout(() => refreshFromSheet(true), 1200);
+        setTimeout(() => refreshFromSheet(true, forceBypass), 1200);
         return;
       }
       isOffline = true;
-      const cached = localStorage.getItem('gymlog_cache');
-      const cachedAi = localStorage.getItem('gymlog_ai_cache');
-      if (cachedAi) aiInsights = JSON.parse(cachedAi);
-      if (cached) {
-        sessions = JSON.parse(cached);
-        targetIdx = findAutoTargetIndex(sessions);
-        currentIdx = targetIdx;
-        if (selectedCalendarIdx === null) {
-          selectedCalendarIdx = targetIdx;
-        }
-        captureSavedSnapshot();
-        setSyncStatus('Cached (Offline)', '');
-        render();
+      if (sessions.length > 0) {
+        syncDirtyState();
       } else {
         setSyncStatus('Sync Error', '');
       }
@@ -776,6 +816,7 @@
   function stepDay(delta) {
     const next = currentIdx + delta;
     if (next >= 0 && next < sessions.length) {
+      userNavigated = true;
       currentIdx = next;
       captureSavedSnapshot();
       render();
@@ -784,6 +825,7 @@
   }
 
   function jumpToTarget() {
+    userNavigated = false;
     currentIdx = targetIdx;
     captureSavedSnapshot();
     render();
@@ -792,6 +834,7 @@
 
   function jumpToSessionIndex(idx) {
     if (idx >= 0 && idx < sessions.length) {
+      userNavigated = (idx !== targetIdx);
       currentIdx = idx;
       captureSavedSnapshot();
       switchTab('workout');
@@ -1558,7 +1601,10 @@
     `;
   }
 
-  window.addEventListener('DOMContentLoaded', refreshFromSheet);
+  window.addEventListener('DOMContentLoaded', () => {
+    hydrateFromLocalCache();
+    refreshFromSheet(false, false);
+  });
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
