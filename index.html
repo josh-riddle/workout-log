@@ -489,6 +489,7 @@
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxkhC54IxDTNkaspBOUuhvuQ0nEBMlWj5rcm66Aza-12UyCq9LJbYeGTGWqwTJlMsjb7A/exec";
 
   let sessions = [];
+  let isOffline = false;
   let aiInsights = null;
   let refreshingInsights = false;
   let currentIdx = 0;
@@ -607,22 +608,26 @@
   }
 
   function syncDirtyState() {
-    const diffs = getModifiedSetCount();
-    const fab = document.getElementById('saveFab');
-    const lbl = document.getElementById('saveFabLabel');
-    const restActive = document.getElementById('restBar').classList.contains('active');
-    const show = diffs > 0 && activeTab === 'workout' && sessions.length > 0;
+  const diffs = getModifiedSetCount();
+  const fab = document.getElementById('saveFab');
+  const lbl = document.getElementById('saveFabLabel');
+  const restActive = document.getElementById('restBar').classList.contains('active');
+  const show = diffs > 0 && activeTab === 'workout' && sessions.length > 0;
 
-    fab.classList.toggle('visible', show);
-    fab.classList.toggle('above-timer', restActive);
+  fab.classList.toggle('visible', show);
+  fab.classList.toggle('above-timer', restActive);
 
-    if (show) {
-      lbl.textContent = diffs === 1 ? 'Save 1 Set' : `Save ${diffs} Sets`;
-      setSyncStatus('Unsaved Changes', 'dirty');
-    } else if (sessions.length > 0) {
+  if (show) {
+    lbl.textContent = diffs === 1 ? 'Save 1 Set' : `Save ${diffs} Sets`;
+    setSyncStatus('Unsaved Changes', 'dirty');
+  } else if (sessions.length > 0) {
+    if (isOffline) {
+      setSyncStatus('Cached (Offline)', '');
+    } else {
       setSyncStatus('Synced ✓', 'live');
     }
   }
+}
 
   function switchTab(tab) {
     activeTab = tab;
@@ -635,51 +640,56 @@
     if (tab === 'calendar') renderCalendar();
   }
 
-  async function refreshFromSheet() {
-    if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
-      setSyncStatus('Missing URL', '');
+  async function refreshFromSheet(isRetry = false) {
+  if (!SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) {
+    setSyncStatus('Missing URL', '');
+    return;
+  }
+  setSyncStatus('Syncing...', 'syncing');
+  try {
+    const resp = await fetch(SCRIPT_URL, { redirect: 'follow', cache: 'no-store' });
+    const res = await resp.json();
+    if (res && res.sessions) {
+      isOffline = false;
+      sessions = res.sessions;
+      if (res.aiInsights) {
+        aiInsights = res.aiInsights;
+        localStorage.setItem('gymlog_ai_cache', JSON.stringify(aiInsights));
+      }
+      localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
+      targetIdx = findAutoTargetIndex(sessions);
+      currentIdx = targetIdx;
+      if (sessions[targetIdx]) {
+        const [y, m] = sessions[targetIdx].date.split('-').map(Number);
+        calYear = y;
+        calMonth = m - 1;
+      }
+      captureSavedSnapshot();
+      render();
+      if (activeTab === 'progress') renderProgress();
+      if (activeTab === 'calendar') renderCalendar();
+    }
+  } catch (err) {
+    if (!isRetry) {
+      setTimeout(() => refreshFromSheet(true), 1200);
       return;
     }
-    setSyncStatus('Syncing...', 'syncing');
-    try {
-      const resp = await fetch(SCRIPT_URL, { redirect: 'follow' });
-      const res = await resp.json();
-      if (res && res.sessions) {
-        sessions = res.sessions;
-        if (res.aiInsights) {
-          aiInsights = res.aiInsights;
-          localStorage.setItem('gymlog_ai_cache', JSON.stringify(aiInsights));
-        }
-        localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
-        targetIdx = findAutoTargetIndex(sessions);
-        currentIdx = targetIdx;
-        if (sessions[targetIdx]) {
-          const [y, m] = sessions[targetIdx].date.split('-').map(Number);
-          calYear = y;
-          calMonth = m - 1;
-        }
-        captureSavedSnapshot();
-        render();
-        if (activeTab === 'progress') renderProgress();
-        if (activeTab === 'calendar') renderCalendar();
-      }
-    } catch (err) {
-      const cached = localStorage.getItem('gymlog_cache');
-      const cachedAi = localStorage.getItem('gymlog_ai_cache');
-      if (cachedAi) aiInsights = JSON.parse(cachedAi);
-      if (cached) {
-        sessions = JSON.parse(cached);
-        targetIdx = findAutoTargetIndex(sessions);
-        currentIdx = targetIdx;
-        captureSavedSnapshot();
-        setSyncStatus('Cached (Offline)', '');
-        render();
-      } else {
-        setSyncStatus('Sync Error', '');
-        alert('Could not reach sheet: ' + err.message);
-      }
+    isOffline = true;
+    const cached = localStorage.getItem('gymlog_cache');
+    const cachedAi = localStorage.getItem('gymlog_ai_cache');
+    if (cachedAi) aiInsights = JSON.parse(cachedAi);
+    if (cached) {
+      sessions = JSON.parse(cached);
+      targetIdx = findAutoTargetIndex(sessions);
+      currentIdx = targetIdx;
+      captureSavedSnapshot();
+      setSyncStatus('Cached (Offline)', '');
+      render();
+    } else {
+      setSyncStatus('Sync Error', '');
     }
   }
+}
 
   async function forceRefreshAiInsights(e) {
     if (e) e.stopPropagation();
@@ -788,6 +798,7 @@
         currentIdx = foundIdx !== -1 ? foundIdx : targetIdx;
       }
       fab.disabled = false;
+      isOffline = false;
       captureSavedSnapshot();
       render();
     } catch (err) {
