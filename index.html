@@ -169,8 +169,33 @@
   .set-row.cardio-row {
     grid-template-columns: 30px 1fr 48px;
   }
+  .set-row.circuit-row {
+    grid-template-columns: minmax(84px, 1.05fr) 1.2fr 48px;
+  }
   .set-row:first-of-type { border-top: none; }
   .set-num { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .move-tag-btn {
+    text-align: left;
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: 9px;
+    padding: 7px 9px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .move-tag-btn span {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--purple);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
 
   .stepper {
     display: flex; align-items: center; justify-content: space-between;
@@ -556,6 +581,11 @@
   let savedSnapshot = '';
   let restSeconds = 0;
   let restInterval = null;
+  let moveLabels = {};
+
+  try {
+    moveLabels = JSON.parse(localStorage.getItem('gymlog_move_labels') || '{}');
+  } catch (e) {}
 
   function hasValue(v) {
     return v !== '' && v !== null && v !== undefined && !isNaN(Number(v));
@@ -564,6 +594,20 @@
   function todayIso() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function getMondayWeekKey(isoDate) {
+    const [y, m, d] = isoDate.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    const dow = dt.getDay();
+    const diff = (dow === 0 ? -6 : 1 - dow);
+    dt.setDate(dt.getDate() + diff);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  }
+
+  function isoToEpoch(isoDate) {
+    const [y, m, d] = isoDate.split('-').map(Number);
+    return new Date(y, m - 1, d).getTime();
   }
 
   function isSessionComplete(s) {
@@ -589,9 +633,36 @@
   function getExerciseCategory(ex, liftRank) {
     if (ex.isCardio) return 'cardio';
     const n = ex.name.toLowerCase();
-    const isAccessoryKeyword = /(curl|extension|hyper|raise|fly|pulldown|pushdown|face pull|plank|crunch|calf|shrug)/i.test(n);
+    const isAccessoryKeyword = /(curl|extension|hyper|raise|fly|pulldown|pushdown|face pull|plank|crunch|calf|shrug|circuit|core|ab)/i.test(n);
     if (liftRank >= 3 || isAccessoryKeyword) return 'accessory';
     return 'main';
+  }
+
+  function isBodyweightCircuit(ex) {
+    if (ex.isCardio) return false;
+    const allZeroWeight = ex.sets.every(st => !st.weight || Number(st.weight) === 0);
+    const hasCircuitName = /(circuit|core|ab|conditioning)/i.test(ex.name);
+    return allZeroWeight && (hasCircuitName || ex.sets.length >= 2);
+  }
+
+  function getMoveLabel(sessionId, exName, setIdx) {
+    const key = `${sessionId}_${exName}_${setIdx}`;
+    return moveLabels[key] || `Move ${setIdx + 1}`;
+  }
+
+  function renameMoveLabel(sessionId, exName, setIdx) {
+    const key = `${sessionId}_${exName}_${setIdx}`;
+    const current = moveLabels[key] || '';
+    const next = prompt(`Label for Move ${setIdx + 1} (leave blank for default):`, current);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (trimmed) {
+      moveLabels[key] = trimmed;
+    } else {
+      delete moveLabels[key];
+    }
+    localStorage.setItem('gymlog_move_labels', JSON.stringify(moveLabels));
+    render();
   }
 
   function calcPlates(weight) {
@@ -744,7 +815,6 @@
           localStorage.setItem('gymlog_ai_cache', JSON.stringify(aiInsights));
         }
 
-        // Preserve any unsaved user edits currently in progress on screen
         if (getModifiedSetCount() > 0 && sessions[currentIdx]) {
           localStorage.setItem('gymlog_cache', JSON.stringify(res.sessions));
           syncDirtyState();
@@ -869,7 +939,7 @@
     st.completed = !st.completed;
     if (st.completed) {
       if (!hasValue(st.loggedReps)) st.loggedReps = Number(st.goal || 5);
-      if (!ex.isCardio) {
+      if (!ex.isCardio && !isBodyweightCircuit(ex)) {
         const liftRank = sessions[currentIdx].exercises.slice(0, exIdx).filter(e => !e.isCardio).length;
         const cat = getExerciseCategory(ex, liftRank);
         startRest(cat === 'main' ? 150 : 90);
@@ -1041,16 +1111,19 @@
         sectionHtml = `<div id="sec-${cat}" class="sec-header">${sectionTitles[cat]}</div>`;
       }
 
+      const isCircuit = isBodyweightCircuit(ex);
       const tagHtml = cat === 'main'
         ? `<span class="cat-tag cat-main">Main Lift</span>`
         : cat === 'accessory'
-          ? `<span class="cat-tag cat-acc">Accessory</span>`
+          ? `<span class="cat-tag cat-acc">${isCircuit ? 'Circuit' : 'Accessory'}</span>`
           : `<span class="cat-tag cat-cardio">Cardio</span>`;
 
       const topWeight = Math.max(...ex.sets.map(st => st.weight || 0));
       const rightLabel = cat === 'cardio'
         ? `Goal: ${ex.sets[0]?.goal || 15} min`
-        : (topWeight > 0 ? `Top: ${topWeight} lb` : 'Bodyweight');
+        : isCircuit
+          ? `${ex.sets.length} Moves`
+          : (topWeight > 0 ? `Top: ${topWeight} lb` : 'Bodyweight');
 
       const rowsHtml = ex.sets.map((st, setIdx) => {
         const displayReps = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 5);
@@ -1064,6 +1137,28 @@
                 <div class="step-val">
                   <span class="step-main">${displayReps} min</span>
                   <span class="step-hint">Goal: ${st.goal} min</span>
+                </div>
+                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
+              </div>
+              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
+            </div>
+          `;
+        }
+
+        if (isCircuit) {
+          const safeEx = ex.name.replace(/'/g, "\\'");
+          const moveLbl = getMoveLabel(s.id, ex.name, setIdx);
+          return `
+            <div class="set-row circuit-row">
+              <button class="move-tag-btn" onclick="renameMoveLabel('${s.id}', '${safeEx}', ${setIdx})" title="Tap to rename move">
+                <span>Move ${setIdx + 1}</span>
+                ${moveLbl}
+              </button>
+              <div class="stepper">
+                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
+                <div class="step-val">
+                  <span class="step-main">${displayReps} reps</span>
+                  <span class="step-hint">Goal: ${st.goal}</span>
                 </div>
                 <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
               </div>
@@ -1128,111 +1223,172 @@
     renderProgress();
   }
 
-  function buildMiniSparklineSvg(points, strokeColor) {
-    if (!points || points.length === 0) {
+  function computeWeeklyPeaks(rawPoints) {
+    if (!rawPoints || !rawPoints.length) return [];
+    const byWeek = {};
+    rawPoints.forEach(p => {
+      const wk = getMondayWeekKey(p.date);
+      if (!byWeek[wk] || p.metric > byWeek[wk].metric) {
+        byWeek[wk] = { weekKey: wk, ...p };
+      }
+    });
+    return Object.keys(byWeek).sort().map(wk => byWeek[wk]);
+  }
+
+  function buildDualLayerSparklineSvg(rawPoints, strokeColor, useWeeklyPeak) {
+    if (!rawPoints || rawPoints.length === 0) {
       return `<div style="height:34px;display:flex;align-items:center;font-size:10px;color:var(--muted);">No trend yet</div>`;
     }
-    if (points.length === 1) {
+
+    const linePoints = useWeeklyPeak ? computeWeeklyPeaks(rawPoints) : rawPoints;
+    const w = 120, h = 34, padX = 5, padY = 5;
+    const allVals = rawPoints.map(p => p.metric);
+    const minV = Math.min(...allVals) - 2;
+    const maxV = Math.max(...allVals) + 2;
+    const span = Math.max(1, maxV - minV);
+
+    const minT = isoToEpoch(rawPoints[0].date);
+    const maxT = isoToEpoch(rawPoints[rawPoints.length - 1].date);
+    const timeSpan = Math.max(1, maxT - minT);
+
+    const mapPoint = (p, idx, total) => {
+      const x = (maxT === minT)
+        ? (total === 1 ? w / 2 : padX + (idx / (total - 1)) * (w - padX * 2))
+        : padX + ((isoToEpoch(p.date) - minT) / timeSpan) * (w - padX * 2);
+      const y = h - padY - ((p.metric - minV) / span) * (h - padY * 2);
+      return { x, y };
+    };
+
+    const rawDotsHtml = useWeeklyPeak
+      ? rawPoints.map((p, i) => {
+          const c = mapPoint(p, i, rawPoints.length);
+          return `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="2" fill="${strokeColor}" opacity="0.32" />`;
+        }).join('')
+      : '';
+
+    if (linePoints.length === 1) {
+      const c = mapPoint(linePoints[0], 0, 1);
       return `
-        <svg viewBox="0 0 120 34" style="width:100%;height:34px;overflow:visible;">
-          <line x1="6" y1="17" x2="114" y2="17" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.5" />
-          <circle cx="60" cy="17" r="3.5" fill="${strokeColor}" />
+        <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:34px;overflow:visible;">
+          <line x1="6" y1="${c.y.toFixed(1)}" x2="114" y2="${c.y.toFixed(1)}" stroke="${strokeColor}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.45" />
+          ${rawDotsHtml}
+          <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3.5" fill="${strokeColor}" />
         </svg>
       `;
     }
 
-    const w = 120, h = 34, padX = 4, padY = 5;
-    const vals = points.map(p => p.metric);
-    const minV = Math.min(...vals) - 2;
-    const maxV = Math.max(...vals) + 2;
-    const span = Math.max(1, maxV - minV);
+    const mappedLine = linePoints.map((p, i) => mapPoint(p, i, linePoints.length));
+    const poly = mappedLine.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+    const last = mappedLine[mappedLine.length - 1];
 
-    const coords = points.map((p, i) => {
-      const x = padX + (i / (points.length - 1)) * (w - padX * 2);
-      const y = h - padY - ((p.metric - minV) / span) * (h - padY * 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    });
-
-    const lastPt = coords[coords.length - 1].split(',');
     return `
       <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:34px;overflow:visible;">
-        <polyline fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${coords.join(' ')}" />
-        <circle cx="${lastPt[0]}" cy="${lastPt[1]}" r="3" fill="${strokeColor}" />
+        ${rawDotsHtml}
+        <polyline fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="${poly}" />
+        <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="3" fill="${strokeColor}" />
       </svg>
     `;
   }
 
-  function buildExpandedChartSvg(points, isAccessory) {
+  function buildDualLayerExpandedSvg(rawPoints, isAccessory, isCircuit) {
     const strokeColor = isAccessory ? '#a78bfa' : '#38bdf8';
     const textColor = isAccessory ? 'var(--purple)' : 'var(--accent)';
-    const metricLabel = isAccessory ? 'Session Vol' : 'Est. 1RM';
+    const unit = isCircuit ? 'reps' : 'lb';
+    const metricLabel = isCircuit ? 'Circuit Reps' : (isAccessory ? 'Session Vol' : 'Weekly Peak e1RM');
     const gradId = isAccessory ? 'areaGradAcc' : 'areaGradMain';
+    const useWeeklyPeak = !isAccessory;
 
-    if (!points || points.length === 0) {
+    if (!rawPoints || rawPoints.length === 0) {
       return `<div style="text-align:center;padding:16px 0;color:var(--muted);font-size:12px;">Complete at least 1 set to plot progression.</div>`;
     }
 
     const pillsHtml = `
       <div class="history-pills">
-        ${points.slice().reverse().map(p => `
-          <span class="hist-pill">${p.date.slice(5)}: <b>${p.weight > 0 ? `${p.weight}×${p.reps}` : `${p.reps}r`}</b> (${p.metric} lb)</span>
+        ${rawPoints.slice().reverse().map(p => `
+          <span class="hist-pill">${p.date.slice(5)}: <b>${p.pillText || (p.weight > 0 ? `${p.weight}×${p.reps}` : `${p.reps}r`)}</b> (${p.metric} ${unit})</span>
         `).join('')}
       </div>
     `;
 
-    if (points.length === 1) {
-      const p = points[0];
+    const linePoints = useWeeklyPeak ? computeWeeklyPeaks(rawPoints) : rawPoints;
+
+    if (linePoints.length === 1 && rawPoints.length === 1) {
+      const p = linePoints[0];
       return `
         <div style="text-align:center;padding:12px 0 4px 0;">
-          <div style="font-size:18px;font-weight:900;color:${textColor};">${p.metric} lb <span style="font-size:11px;color:var(--muted);">${metricLabel}</span></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Logged ${p.weight > 0 ? `${p.weight} lb × ${p.reps} reps` : `${p.reps} reps`} on ${p.date}</div>
+          <div style="font-size:18px;font-weight:900;color:${textColor};">${p.metric} ${unit} <span style="font-size:11px;color:var(--muted);">${metricLabel}</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Logged ${p.pillText || (p.weight > 0 ? `${p.weight} lb × ${p.reps} reps` : `${p.reps} reps`)} on ${p.date}</div>
         </div>
         ${pillsHtml}
       `;
     }
 
-    const w = 320, h = 115, padX = 16, padY = 16;
-    const vals = points.map(p => p.metric);
-    const minV = Math.min(...vals) - 5;
-    const maxV = Math.max(...vals) + 5;
+    const w = 320, h = 118, padX = 16, padY = 16;
+    const allVals = rawPoints.map(p => p.metric);
+    const minV = Math.min(...allVals) - 5;
+    const maxV = Math.max(...allVals) + 5;
     const span = Math.max(1, maxV - minV);
 
-    const coords = points.map((p, i) => {
-      const x = padX + (i / (points.length - 1)) * (w - padX * 2);
+    const minT = isoToEpoch(rawPoints[0].date);
+    const maxT = isoToEpoch(rawPoints[rawPoints.length - 1].date);
+    const timeSpan = Math.max(1, maxT - minT);
+
+    const mapPoint = (p, idx, total) => {
+      const x = (maxT === minT)
+        ? (total === 1 ? w / 2 : padX + (idx / (total - 1)) * (w - padX * 2))
+        : padX + ((isoToEpoch(p.date) - minT) / timeSpan) * (w - padX * 2);
       const y = h - padY - ((p.metric - minV) / span) * (h - padY * 2);
       return { x, y, ...p };
-    });
+    };
 
-    const polyPoints = coords.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
-    const areaPoints = `${coords[0].x.toFixed(1)},${h - padY} ${polyPoints} ${coords[coords.length - 1].x.toFixed(1)},${h - padY}`;
-    const dots = coords.map(c => `
-      <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="4" fill="${strokeColor}" stroke="#0b0e14" stroke-width="1.5" />
+    const rawMapped = rawPoints.map((p, i) => mapPoint(p, i, rawPoints.length));
+    const lineMapped = linePoints.map((p, i) => mapPoint(p, i, linePoints.length));
+
+    const rawDotsSvg = useWeeklyPeak
+      ? rawMapped.map(c => `
+          <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3.5" fill="${strokeColor}" opacity="0.32" />
+        `).join('')
+      : '';
+
+    const polyPoints = lineMapped.map(c => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+    const areaPoints = lineMapped.length > 1
+      ? `${lineMapped[0].x.toFixed(1)},${h - padY} ${polyPoints} ${lineMapped[lineMapped.length - 1].x.toFixed(1)},${h - padY}`
+      : '';
+
+    const peakDotsSvg = lineMapped.map(c => `
+      <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="4.5" fill="${strokeColor}" stroke="#0b0e14" stroke-width="1.5" />
     `).join('');
 
-    const first = points[0];
-    const latest = points[points.length - 1];
+    const first = linePoints[0];
+    const latest = linePoints[linePoints.length - 1];
     const diff = latest.metric - first.metric;
-    const diffStr = diff >= 0 ? `+${diff} lb` : `${diff} lb`;
+    const diffStr = diff >= 0 ? `+${diff} ${unit}` : `${diff} ${unit}`;
+
+    const legendSub = useWeeklyPeak
+      ? `<span style="font-size:10px;color:var(--muted);">● Weekly Peak Line   ○ Individual Sessions</span>`
+      : `<span style="font-size:10px;color:var(--muted);">${rawPoints.length} sessions logged</span>`;
 
     return `
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
-        <span style="font-size:11px;font-weight:700;color:var(--muted);">${metricLabel} Trend (${points.length} sessions)</span>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+        <span style="font-size:11px;font-weight:700;color:var(--muted);">${metricLabel}</span>
         <span style="font-size:12px;font-weight:800;color:${diff >= 0 ? 'var(--green)' : 'var(--amber)'};">${diffStr} since ${first.date.slice(5)}</span>
       </div>
-      <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:115px;overflow:visible;">
+      <div style="margin-bottom:4px;">${legendSub}</div>
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:118px;overflow:visible;">
         <defs>
           <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.28" />
             <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0.0" />
           </linearGradient>
         </defs>
-        <polygon points="${areaPoints}" fill="url(#${gradId})" />
-        <polyline fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${polyPoints}" />
-        ${dots}
+        ${lineMapped.length > 1 ? `<polygon points="${areaPoints}" fill="url(#${gradId})" />` : ''}
+        ${rawDotsSvg}
+        ${lineMapped.length > 1 ? `<polyline fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${polyPoints}" />` : ''}
+        ${peakDotsSvg}
       </svg>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px;">
-        <span>${first.date} (${first.weight > 0 ? `${first.weight}×${first.reps}` : `${first.reps}r`})</span>
-        <span>${latest.date} (${latest.weight > 0 ? `${latest.weight}×${latest.reps}` : `${latest.reps}r`})</span>
+        <span>${first.date} (${first.metric} ${unit})</span>
+        <span>${latest.date} (${latest.metric} ${unit})</span>
       </div>
       ${pillsHtml}
     `;
@@ -1264,10 +1420,20 @@
         const cat = getExerciseCategory(ex, liftRank);
         if (!ex.isCardio) liftRank++;
 
+        const circuitFlag = isBodyweightCircuit(ex);
+
         if (cat === 'accessory') {
           accessorySet.add(ex.name);
           if (!accessoryStats[ex.name]) {
-            accessoryStats[ex.name] = { bestWeight: 0, bestReps: 0, totalVol: 0, totalReps: 0 };
+            accessoryStats[ex.name] = {
+              isCircuit: circuitFlag,
+              bestWeight: 0,
+              bestReps: 0,
+              totalVol: 0,
+              totalReps: 0,
+              circuitsCompleted: 0,
+              bestSessionCircuitReps: 0
+            };
           }
           if (!historyMap[ex.name]) historyMap[ex.name] = [];
         }
@@ -1275,8 +1441,10 @@
         let sessionMainBest = null;
         let sessionAccVol = 0;
         let sessionAccTop = { weight: 0, reps: 0 };
+        let sessionMoveParts = [];
+        let completedMovesCount = 0;
 
-        ex.sets.forEach(st => {
+        ex.sets.forEach((st, setIdx) => {
           if (!st.completed) return;
           const r = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 0);
 
@@ -1299,6 +1467,8 @@
             sessionAccVol += setVol;
             accessoryStats[ex.name].totalVol += (st.weight > 0 ? st.weight * r : 0);
             accessoryStats[ex.name].totalReps += r;
+            completedMovesCount++;
+            sessionMoveParts.push(`M${setIdx + 1}:${r}`);
 
             if (st.weight > accessoryStats[ex.name].bestWeight ||
                (st.weight === accessoryStats[ex.name].bestWeight && r > accessoryStats[ex.name].bestReps)) {
@@ -1316,11 +1486,20 @@
           historyMap[ex.name].push(sessionMainBest);
         }
         if (cat === 'accessory' && sessionAccVol > 0) {
+          if (circuitFlag) {
+            if (completedMovesCount >= ex.sets.length) {
+              accessoryStats[ex.name].circuitsCompleted++;
+            }
+            if (sessionAccVol > accessoryStats[ex.name].bestSessionCircuitReps) {
+              accessoryStats[ex.name].bestSessionCircuitReps = sessionAccVol;
+            }
+          }
           historyMap[ex.name].push({
             date: s.date,
             weight: sessionAccTop.weight,
             reps: sessionAccTop.reps,
-            metric: Math.round(sessionAccVol)
+            metric: Math.round(sessionAccVol),
+            pillText: circuitFlag ? sessionMoveParts.join(' • ') : null
           });
         }
       });
@@ -1380,7 +1559,7 @@
       </div>
     `;
 
-    const mainCardsHtml = `<div class="sec-header">Main Compounds (Tap to Expand)</div><div class="stat-grid">` + mainLifts.map(name => {
+    const mainCardsHtml = `<div class="sec-header">Main Compounds (Weekly Peak e1RM)</div><div class="stat-grid">` + mainLifts.map(name => {
       const b = mainBestMap[name];
       const pts = historyMap[name] || [];
       const isExpanded = expandedCardName === name;
@@ -1397,8 +1576,8 @@
             ${b.e1rm ? `Peak: ${b.weight} × ${b.reps} (${b.date.slice(5)})` : 'No logged sets'}
           </div>
           ${isExpanded
-            ? `<div class="expanded-detail">${buildExpandedChartSvg(pts, false)}</div>`
-            : `<div class="mini-spark-wrap">${buildMiniSparklineSvg(pts, '#38bdf8')}</div>`
+            ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, false, false)}</div>`
+            : `<div class="mini-spark-wrap">${buildDualLayerSparklineSvg(pts, '#38bdf8', true)}</div>`
           }
         </div>
       `;
@@ -1406,7 +1585,7 @@
 
     const accessoryNames = Array.from(accessorySet);
     const accHtml = accessoryNames.length ? `
-      <div class="sec-header">Accessories (Tap to Expand)</div>
+      <div class="sec-header">Accessories & Circuits (Tap to Expand)</div>
       <div class="stat-grid">
         ${accessoryNames.map(name => {
           const st = accessoryStats[name];
@@ -1414,12 +1593,19 @@
           const isExpanded = expandedCardName === name;
           const safeName = name.replace(/'/g, "\\'");
           const hasLogs = st.totalReps > 0;
-          const topHeadline = !hasLogs
-            ? '—'
-            : (st.bestWeight > 0 ? `${st.bestWeight} lb × ${st.bestReps}` : `${st.bestReps} reps`);
-          const subLine = !hasLogs
-            ? 'No logged sets'
-            : (st.totalVol > 0 ? `Total Vol: ${formatShortTon(st.totalVol)}` : `Total Reps: ${st.totalReps}`);
+
+          let topHeadline = '—';
+          let subLine = 'No logged sets';
+
+          if (hasLogs) {
+            if (st.isCircuit) {
+              topHeadline = `${st.bestSessionCircuitReps} reps`;
+              subLine = `${st.circuitsCompleted} circuit${st.circuitsCompleted === 1 ? '' : 's'} • ${st.totalReps} total reps`;
+            } else {
+              topHeadline = st.bestWeight > 0 ? `${st.bestWeight} lb × ${st.bestReps}` : `${st.bestReps} reps`;
+              subLine = st.totalVol > 0 ? `Total Vol: ${formatShortTon(st.totalVol)}` : `Total Reps: ${st.totalReps}`;
+            }
+          }
 
           return `
             <div class="stat-box acc-box ${isExpanded ? 'expanded' : ''}" onclick="toggleExpandCard('${safeName}')">
@@ -1430,8 +1616,8 @@
               <div class="stat-num" style="color:var(--purple);">${topHeadline}</div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px;">${subLine}</div>
               ${isExpanded
-                ? `<div class="expanded-detail">${buildExpandedChartSvg(pts, true)}</div>`
-                : `<div class="mini-spark-wrap">${buildMiniSparklineSvg(pts, '#a78bfa')}</div>`
+                ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, true, st.isCircuit)}</div>`
+                : `<div class="mini-spark-wrap">${buildDualLayerSparklineSvg(pts, '#a78bfa', false)}</div>`
               }
             </div>
           `;
@@ -1470,10 +1656,11 @@
       const cat = getExerciseCategory(ex, liftRank);
       if (!ex.isCardio) liftRank++;
 
+      const circuitFlag = isBodyweightCircuit(ex);
       const tagHtml = cat === 'main'
         ? `<span class="cat-tag cat-main">Main</span>`
         : cat === 'accessory'
-          ? `<span class="cat-tag cat-acc">Acc</span>`
+          ? `<span class="cat-tag cat-acc">${circuitFlag ? 'Circuit' : 'Acc'}</span>`
           : `<span class="cat-tag cat-cardio">Cardio</span>`;
 
       const doneCount = ex.sets.filter(st => st.completed).length;
@@ -1483,6 +1670,9 @@
       if (cat === 'cardio') {
         const mins = ex.sets.reduce((acc, st) => acc + (hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 15)), 0);
         summaryRight = `${mins} min`;
+      } else if (circuitFlag) {
+        const repsEach = ex.sets[0]?.goal || 30;
+        summaryRight = `${totalCount} moves × ${repsEach}`;
       } else {
         const topWeight = Math.max(...ex.sets.map(st => st.weight || 0));
         const sampleReps = ex.sets[ex.sets.length - 1]?.goal || 5;
