@@ -170,14 +170,14 @@
     grid-template-columns: 30px 1fr 48px;
   }
   .set-row.circuit-row {
-    grid-template-columns: minmax(84px, 1.05fr) 1.2fr 48px;
+    grid-template-columns: minmax(96px, 1.15fr) 1.15fr 48px;
   }
   .set-row:first-of-type { border-top: none; }
   .set-num { font-size: 12px; font-weight: 700; color: var(--muted); }
   .move-tag-btn {
     text-align: left;
     background: var(--surface-2);
-    border: 1px dashed var(--border);
+    border: 1px solid var(--border);
     border-radius: 9px;
     padding: 7px 9px;
     color: var(--text);
@@ -185,16 +185,26 @@
     font-weight: 700;
     cursor: pointer;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
-  .move-tag-btn span {
-    display: block;
+  .move-tag-btn.modified-move {
+    border-color: rgba(167, 139, 250, 0.65);
+  }
+  .move-tag-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-size: 9px;
     font-weight: 700;
     color: var(--purple);
     text-transform: uppercase;
     letter-spacing: 0.3px;
+    margin-bottom: 1px;
+  }
+  .move-tag-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .stepper {
@@ -240,6 +250,71 @@
     border-color: #4ade80;
     color: #052e16;
     box-shadow: 0 0 12px rgba(34, 197, 94, 0.35);
+  }
+
+  /* Native PWA Circuit Move Picker Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(5, 8, 14, 0.78);
+    backdrop-filter: blur(4px);
+    display: none; align-items: flex-end; justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal-sheet {
+    width: 100%; max-width: 540px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    padding: 16px 16px 26px 16px;
+    max-height: 82vh;
+    overflow-y: auto;
+    animation: sheetUp 0.18s ease-out;
+  }
+  @keyframes sheetUp {
+    from { transform: translateY(30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+  }
+  .modal-title { font-size: 15px; font-weight: 800; color: var(--text); }
+  .modal-close {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 8px; padding: 5px 10px;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .option-list {
+    display: flex; flex-direction: column; gap: 7px;
+    margin-bottom: 14px;
+  }
+  .option-item {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 11px; padding: 11px 13px;
+    color: var(--text); font-size: 14px; font-weight: 700;
+    cursor: pointer; text-align: left;
+  }
+  .option-item.selected {
+    border-color: var(--purple);
+    background: var(--purple-dim);
+    color: #ede9fe;
+  }
+  .custom-move-row {
+    display: flex; gap: 8px; margin-top: 8px;
+  }
+  .custom-move-input {
+    flex: 1;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+    color: var(--text); font-size: 13px; font-weight: 600;
+    outline: none;
+  }
+  .custom-move-input:focus { border-color: var(--purple); }
+  .custom-move-apply {
+    background: var(--purple); color: #1e1035;
+    border: none; border-radius: 10px; padding: 0 14px;
+    font-size: 13px; font-weight: 800; cursor: pointer;
   }
 
   /* Contextual Save FAB */
@@ -396,6 +471,14 @@
     background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 6px; padding: 3px 7px; color: var(--muted);
   }
+  .move-breakdown-chips {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+  }
+  .move-chip {
+    font-size: 10px; font-weight: 700;
+    background: var(--purple-dim); border: 1px solid rgba(167, 139, 250, 0.35);
+    color: #ddd6fe; border-radius: 6px; padding: 3px 7px;
+  }
 
   /* Calendar View */
   .cal-header {
@@ -548,6 +631,22 @@
   </div>
 </div>
 
+<!-- CIRCUIT EXERCISE PICKER MODAL -->
+<div id="movePickerModal" class="modal-backdrop" onclick="closeMovePicker(event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div id="movePickerTitle" class="modal-title">Select Move 1</div>
+      <button class="modal-close" onclick="closeMovePicker()">Cancel</button>
+    </div>
+    <div id="movePickerOptions" class="option-list"></div>
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;">Or Enter Custom Move</div>
+    <div class="custom-move-row">
+      <input id="customMoveInput" class="custom-move-input" type="text" placeholder="e.g., Landmine Anti-Rot." />
+      <button class="custom-move-apply" onclick="applyCustomMove()">Set</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONTEXTUAL SAVE FAB -->
 <button id="saveFab" class="save-fab" onclick="saveCurrentSession()">
   <span>✓</span>
@@ -581,6 +680,7 @@
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxkhC54IxDTNkaspBOUuhvuQ0nEBMlWj5rcm66Aza-12UyCq9LJbYeGTGWqwTJlMsjb7A/exec";
 
   let sessions = [];
+  let circuitOptions = [];
   let isOffline = false;
   let aiInsights = null;
   let refreshingInsights = false;
@@ -595,11 +695,7 @@
   let savedSnapshot = '';
   let restSeconds = 0;
   let restInterval = null;
-  let moveLabels = {};
-
-  try {
-    moveLabels = JSON.parse(localStorage.getItem('gymlog_move_labels') || '{}');
-  } catch (e) {}
+  let pickerTarget = null; // { exIdx, setIdx }
 
   function hasValue(v) {
     return v !== '' && v !== null && v !== undefined && !isNaN(Number(v));
@@ -659,24 +755,96 @@
     return allZeroWeight && (hasCircuitName || ex.sets.length >= 2);
   }
 
-  function getMoveLabel(sessionId, exName, setIdx) {
-    const key = `${sessionId}_${exName}_${setIdx}`;
-    return moveLabels[key] || `Move ${setIdx + 1}`;
+  // Smart Carry-Forward: resolves explicit cell note first, otherwise inherits from most recent prior session
+  function resolveCarryForwardMoves(list) {
+    const lastKnownByExercise = {}; // { exName: ['Move A', 'Move B', 'Move C'] }
+    list.forEach(s => {
+      s.exercises.forEach(ex => {
+        if (!isBodyweightCircuit(ex)) return;
+        const explicitNotes = ex.sets.map(st => String(st.moveName || '').trim());
+        const hasAnyExplicit = explicitNotes.some(Boolean);
+
+        if (hasAnyExplicit) {
+          if (!lastKnownByExercise[ex.name]) lastKnownByExercise[ex.name] = [];
+          explicitNotes.forEach((n, idx) => {
+            if (n) lastKnownByExercise[ex.name][idx] = n;
+          });
+        } else if (lastKnownByExercise[ex.name]) {
+          ex.sets.forEach((st, idx) => {
+            if (!st.moveName && lastKnownByExercise[ex.name][idx]) {
+              st.moveName = lastKnownByExercise[ex.name][idx];
+              st.isInherited = true;
+            }
+          });
+        }
+      });
+    });
   }
 
-  function renameMoveLabel(sessionId, exName, setIdx) {
-    const key = `${sessionId}_${exName}_${setIdx}`;
-    const current = moveLabels[key] || '';
-    const next = prompt(`Label for Move ${setIdx + 1} (leave blank for default):`, current);
-    if (next === null) return;
-    const trimmed = next.trim();
-    if (trimmed) {
-      moveLabels[key] = trimmed;
+  function openMovePicker(exIdx, setIdx) {
+    pickerTarget = { exIdx, setIdx };
+    const ex = sessions[currentIdx].exercises[exIdx];
+    const st = ex.sets[setIdx];
+    const currentMove = String(st.moveName || '').trim();
+
+    document.getElementById('movePickerTitle').textContent = `${ex.name} • Move ${setIdx + 1}`;
+    document.getElementById('customMoveInput').value = '';
+
+    // Merge Config!J2:J options with any previously used notes in history
+    const pool = new Set(circuitOptions);
+    sessions.forEach(s => s.exercises.forEach(e => {
+      if (e.name === ex.name) {
+        e.sets.forEach(setItem => {
+          if (setItem.moveName) pool.add(String(setItem.moveName).trim());
+        });
+      }
+    }));
+
+    const optionsList = Array.from(pool).filter(Boolean);
+    const listEl = document.getElementById('movePickerOptions');
+
+    if (optionsList.length === 0) {
+      listEl.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:6px 0;">No exercises found in <b>Config!J2:J</b> yet. Type a move below to add it now.</div>`;
     } else {
-      delete moveLabels[key];
+      listEl.innerHTML = optionsList.map(opt => {
+        const isSelected = opt.toLowerCase() === currentMove.toLowerCase();
+        const safeOpt = opt.replace(/'/g, "\\'");
+        return `
+          <button class="option-item ${isSelected ? 'selected' : ''}" onclick="selectCircuitMove('${safeOpt}')">
+            <span>${opt}</span>
+            ${isSelected ? '<span style="color:var(--purple);font-size:12px;">Selected ✓</span>' : ''}
+          </button>
+        `;
+      }).join('');
     }
-    localStorage.setItem('gymlog_move_labels', JSON.stringify(moveLabels));
+
+    document.getElementById('movePickerModal').classList.add('open');
+  }
+
+  function closeMovePicker(e) {
+    if (e && e.target && e.target.id !== 'movePickerModal') return;
+    document.getElementById('movePickerModal').classList.remove('open');
+    pickerTarget = null;
+  }
+
+  function selectCircuitMove(moveName) {
+    if (!pickerTarget) return;
+    const { exIdx, setIdx } = pickerTarget;
+    const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
+    if (st.origMoveName === undefined) st.origMoveName = String(st.moveName || '');
+    st.moveName = String(moveName || '').trim();
+    st.isInherited = false;
+    st.moveModified = (st.moveName !== st.origMoveName);
+
+    closeMovePicker();
+    syncDirtyState();
     render();
+  }
+
+  function applyCustomMove() {
+    const val = document.getElementById('customMoveInput').value.trim();
+    if (!val) return;
+    selectCircuitMove(val);
   }
 
   function calcPlates(weight) {
@@ -720,7 +888,8 @@
         out.push({
           w: Number(st.weight || 0),
           r: reps,
-          c: Boolean(st.completed)
+          c: Boolean(st.completed),
+          m: String(st.moveName || '')
         });
       });
     });
@@ -734,6 +903,8 @@
         ex.sets.forEach(st => {
           st.origWeight = Number(st.weight || 0);
           st.weightModified = false;
+          st.origMoveName = String(st.moveName || '');
+          st.moveModified = false;
         });
       });
     }
@@ -749,7 +920,7 @@
 
     let diffs = 0;
     for (let i = 0; i < curr.length; i++) {
-      if (orig[i].w !== curr[i].w || orig[i].r !== curr[i].r || orig[i].c !== curr[i].c) {
+      if (orig[i].w !== curr[i].w || orig[i].r !== curr[i].r || orig[i].c !== curr[i].c || orig[i].m !== curr[i].m) {
         diffs++;
       }
     }
@@ -767,7 +938,7 @@
     fab.classList.toggle('above-timer', restActive);
 
     if (show) {
-      lbl.textContent = diffs === 1 ? 'Save 1 Set' : `Save ${diffs} Sets`;
+      lbl.textContent = diffs === 1 ? 'Save 1 Change' : `Save ${diffs} Changes`;
       setSyncStatus('Unsaved Changes', 'dirty');
     } else if (sessions.length > 0) {
       if (isOffline) {
@@ -794,11 +965,15 @@
       const cachedAi = localStorage.getItem('gymlog_ai_cache');
       if (cachedAi) aiInsights = JSON.parse(cachedAi);
 
+      const cachedOpts = localStorage.getItem('gymlog_circuit_opts');
+      if (cachedOpts) circuitOptions = JSON.parse(cachedOpts);
+
       const cached = localStorage.getItem('gymlog_cache');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
           sessions = parsed;
+          resolveCarryForwardMoves(sessions);
           targetIdx = findAutoTargetIndex(sessions);
           currentIdx = targetIdx;
           if (selectedCalendarIdx === null) {
@@ -833,6 +1008,10 @@
 
       if (res && res.sessions) {
         isOffline = false;
+        if (Array.isArray(res.circuitOptions)) {
+          circuitOptions = res.circuitOptions;
+          localStorage.setItem('gymlog_circuit_opts', JSON.stringify(circuitOptions));
+        }
         if (res.aiInsights) {
           aiInsights = res.aiInsights;
           localStorage.setItem('gymlog_ai_cache', JSON.stringify(aiInsights));
@@ -846,6 +1025,7 @@
 
         const activeId = sessions[currentIdx] ? sessions[currentIdx].id : null;
         sessions = res.sessions;
+        resolveCarryForwardMoves(sessions);
         localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
         targetIdx = findAutoTargetIndex(sessions);
 
@@ -994,8 +1174,13 @@
       const res = await resp.json();
       if (res && res.sessions) {
         isOffline = false;
+        if (Array.isArray(res.circuitOptions)) {
+          circuitOptions = res.circuitOptions;
+          localStorage.setItem('gymlog_circuit_opts', JSON.stringify(circuitOptions));
+        }
         const activeId = session.id;
         sessions = res.sessions;
+        resolveCarryForwardMoves(sessions);
         localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
         targetIdx = findAutoTargetIndex(sessions);
         const foundIdx = sessions.findIndex(s => s.id === activeId);
@@ -1171,13 +1356,15 @@
         }
 
         if (isCircuit) {
-          const safeEx = ex.name.replace(/'/g, "\\'");
-          const moveLbl = getMoveLabel(s.id, ex.name, setIdx);
+          const moveLbl = st.moveName || `Select Move ${setIdx + 1}`;
           return `
             <div class="set-row circuit-row">
-              <button class="move-tag-btn" onclick="renameMoveLabel('${s.id}', '${safeEx}', ${setIdx})" title="Tap to rename move">
-                <span>Move ${setIdx + 1}</span>
-                ${moveLbl}
+              <button class="move-tag-btn ${st.moveModified ? 'modified-move' : ''}" onclick="openMovePicker(${exIdx}, ${setIdx})">
+                <span class="move-tag-top">
+                  <span>Move ${setIdx + 1}</span>
+                  <span>▾</span>
+                </span>
+                <span class="move-tag-name" style="${st.moveName ? '' : 'color:var(--muted);'}">${moveLbl}</span>
               </button>
               <div class="stepper">
                 <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
@@ -1316,7 +1503,7 @@
     `;
   }
 
-  function buildDualLayerExpandedSvg(rawPoints, isAccessory, isCircuit) {
+  function buildDualLayerExpandedSvg(rawPoints, isAccessory, isCircuit, moveTotalsMap) {
     const strokeColor = isAccessory ? '#a78bfa' : '#38bdf8';
     const textColor = isAccessory ? 'var(--purple)' : 'var(--accent)';
     const unit = isCircuit ? 'reps' : 'lb';
@@ -1327,6 +1514,14 @@
     if (!rawPoints || rawPoints.length === 0) {
       return `<div style="text-align:center;padding:16px 0;color:var(--muted);font-size:12px;">Complete at least 1 set to plot progression.</div>`;
     }
+
+    const breakdownHtml = (isCircuit && moveTotalsMap && Object.keys(moveTotalsMap).length > 0)
+      ? `<div class="move-breakdown-chips">
+          ${Object.entries(moveTotalsMap).map(([mName, mReps]) => `
+            <span class="move-chip">${mName}: <b>${mReps} reps</b></span>
+          `).join('')}
+        </div>`
+      : '';
 
     const pillsHtml = `
       <div class="history-pills">
@@ -1345,6 +1540,7 @@
           <div style="font-size:18px;font-weight:900;color:${textColor};">${p.metric} ${unit} <span style="font-size:11px;color:var(--muted);">${metricLabel}</span></div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px;">Logged ${p.pillText || (p.weight > 0 ? `${p.weight} lb × ${p.reps} reps` : `${p.reps} reps`)} on ${p.date}</div>
         </div>
+        ${breakdownHtml}
         ${pillsHtml}
       `;
     }
@@ -1416,6 +1612,7 @@
         <span>${first.date} (${first.metric} ${unit})</span>
         <span>${latest.date} (${latest.metric} ${unit})</span>
       </div>
+      ${breakdownHtml}
       ${pillsHtml}
     `;
   }
@@ -1458,7 +1655,8 @@
               totalVol: 0,
               totalReps: 0,
               circuitsCompleted: 0,
-              bestSessionCircuitReps: 0
+              bestSessionCircuitReps: 0,
+              moveTotals: {}
             };
           }
           if (!historyMap[ex.name]) historyMap[ex.name] = [];
@@ -1494,7 +1692,10 @@
             accessoryStats[ex.name].totalVol += (st.weight > 0 ? st.weight * r : 0);
             accessoryStats[ex.name].totalReps += r;
             completedMovesCount++;
-            sessionMoveParts.push(`M${setIdx + 1}:${r}`);
+
+            const mLabel = st.moveName || `Move ${setIdx + 1}`;
+            sessionMoveParts.push(`${mLabel} (${r})`);
+            accessoryStats[ex.name].moveTotals[mLabel] = (accessoryStats[ex.name].moveTotals[mLabel] || 0) + r;
 
             if (st.weight > accessoryStats[ex.name].bestWeight ||
                (st.weight === accessoryStats[ex.name].bestWeight && r > accessoryStats[ex.name].bestReps)) {
@@ -1602,7 +1803,7 @@
             ${b.e1rm ? `Peak: ${b.weight} × ${b.reps} (${b.date.slice(5)})` : 'No logged sets'}
           </div>
           ${isExpanded
-            ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, false, false)}</div>`
+            ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, false, false, null)}</div>`
             : `<div class="mini-spark-wrap">${buildDualLayerSparklineSvg(pts, '#38bdf8', true)}</div>`
           }
         </div>
@@ -1642,7 +1843,7 @@
               <div class="stat-num" style="color:var(--purple);">${topHeadline}</div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px;">${subLine}</div>
               ${isExpanded
-                ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, true, st.isCircuit)}</div>`
+                ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, true, st.isCircuit, st.moveTotals)}</div>`
                 : `<div class="mini-spark-wrap">${buildDualLayerSparklineSvg(pts, '#a78bfa', false)}</div>`
               }
             </div>
