@@ -202,6 +202,9 @@
     background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 10px; padding: 4px;
   }
+  .stepper.modified-weight {
+    border-color: rgba(245, 158, 11, 0.6);
+  }
   .step-btn {
     width: 28px; height: 28px; border-radius: 7px; border: none;
     background: var(--bg); color: var(--text); font-weight: 800; font-size: 15px;
@@ -210,6 +213,10 @@
   .step-val { text-align: center; }
   .step-main { font-size: 14px; font-weight: 800; display: block; }
   .step-hint { font-size: 10px; color: var(--muted); display: block; }
+  .fx-tag {
+    font-size: 9px; font-weight: 800; color: var(--accent);
+    opacity: 0.75; margin-left: 2px;
+  }
 
   .check-btn {
     width: 46px; height: 42px; border-radius: 11px;
@@ -714,7 +721,16 @@
   }
 
   function captureSavedSnapshot() {
-    savedSnapshot = JSON.stringify(getComparableSets(sessions[currentIdx]));
+    const s = sessions[currentIdx];
+    if (s && s.exercises) {
+      s.exercises.forEach(ex => {
+        ex.sets.forEach(st => {
+          st.origWeight = Number(st.weight || 0);
+          st.weightModified = false;
+        });
+      });
+    }
+    savedSnapshot = JSON.stringify(getComparableSets(s));
     syncDirtyState();
   }
 
@@ -920,7 +936,9 @@
 
   function adjustWeight(exIdx, setIdx, delta) {
     const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
+    if (st.origWeight === undefined) st.origWeight = Number(st.weight || 0);
     st.weight = Math.max(0, +(st.weight + delta).toFixed(1));
+    st.weightModified = (st.weight !== st.origWeight);
     syncDirtyState();
     render();
   }
@@ -1170,14 +1188,15 @@
         const weightHint = cat === 'main'
           ? calcPlates(st.weight)
           : (st.weight > 0 ? 'Accessory' : 'Bodyweight');
+        const fxBadge = (st.hasFormula && !st.weightModified) ? `<span class="fx-tag" title="Formula-linked cell">ƒx</span>` : '';
 
         return `
           <div class="set-row">
             <div class="set-num">S${setIdx + 1}</div>
-            <div class="stepper">
+            <div class="stepper ${st.weightModified ? 'modified-weight' : ''}">
               <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -2.5)">−</button>
               <div class="step-val">
-                <span class="step-main">${st.weight} lb</span>
+                <span class="step-main">${st.weight} lb${fxBadge}</span>
                 <span class="step-hint">${weightHint}</span>
               </div>
               <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, 2.5)">+</button>
