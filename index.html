@@ -213,9 +213,16 @@
   .step-val { text-align: center; }
   .step-main { font-size: 14px; font-weight: 800; display: block; }
   .step-hint { font-size: 10px; color: var(--muted); display: block; }
-  .fx-tag {
-    font-size: 9px; font-weight: 800; color: var(--accent);
-    opacity: 0.75; margin-left: 2px;
+  .fx-dot {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.55;
+    vertical-align: middle;
+    margin-left: 4px;
+    margin-bottom: 2px;
   }
 
   .check-btn {
@@ -1188,7 +1195,7 @@
         const weightHint = cat === 'main'
           ? calcPlates(st.weight)
           : (st.weight > 0 ? 'Accessory' : 'Bodyweight');
-        const fxBadge = (st.hasFormula && !st.weightModified) ? `<span class="fx-tag" title="Formula-linked cell">ƒx</span>` : '';
+        const fxBadge = (st.hasFormula && !st.weightModified) ? `<span class="fx-dot" title="Formula-linked cell"></span>` : '';
 
         return `
           <div class="set-row">
