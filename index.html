@@ -634,14 +634,14 @@
         <button id="syncPill" class="sync-pill" onclick="refreshFromSheet(false, true)">Connecting...</button>
       </div>
       <div class="day-nav">
-        <button id="prevBtn" class="nav-arrow" onclick="stepDay(-1)">‹</button>
+        <button id="prevBtn" class="nav-arrow" onclick="stepDay(-1)">&#8249;</button>
         <div class="nav-center">
           <div id="navDate" class="nav-date">Loading schedule...</div>
           <div id="navMeta" class="nav-meta"></div>
         </div>
-        <button id="nextBtn" class="nav-arrow" onclick="stepDay(1)">›</button>
+        <button id="nextBtn" class="nav-arrow" onclick="stepDay(1)">&#8250;</button>
       </div>
-      <button id="jumpNextBtn" class="jump-btn" style="display:none;" onclick="jumpToTarget()">Jump to Next Up →</button>
+      <button id="jumpNextBtn" class="jump-btn" style="display:none;" onclick="jumpToTarget()">Jump to Next Up &#8594;</button>
       <div id="progWrap" class="prog-wrap" style="display:none;">
         <div class="prog-labels">
           <span id="progText">0 / 0 Sets Done</span>
@@ -657,7 +657,7 @@
   <!-- PROGRESS & INSIGHTS VIEW -->
   <div id="view-progress" style="display:none; padding-top:14px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <div style="font-size:18px;font-weight:800;">Progress & Insights</div>
+      <div style="font-size:18px;font-weight:800;">Progress &amp; Insights</div>
       <button class="sync-pill live" onclick="refreshFromSheet(false, true)">Refresh Data</button>
     </div>
     <div id="progressContainer"></div>
@@ -691,7 +691,7 @@
 
 <!-- CONTEXTUAL SAVE FAB -->
 <button id="saveFab" class="save-fab" onclick="saveCurrentSession()">
-  <span>✓</span>
+  <span>&#10003;</span>
   <span id="saveFabLabel">Save Changes</span>
 </button>
 
@@ -705,7 +705,7 @@
     <button class="rest-btn" onclick="startRest(90)">1:30</button>
     <button class="rest-btn" onclick="startRest(150)">2:30</button>
     <button class="rest-btn" onclick="adjustRest(30)">+30s</button>
-    <button class="rest-btn" onclick="stopRest()">✕</button>
+    <button class="rest-btn" onclick="stopRest()">&#10005;</button>
   </div>
 </div>
 
@@ -923,7 +923,6 @@
     if (st.origMoveName === undefined) st.origMoveName = String(st.moveName || '');
 
     const clean = String(moveName || '').trim();
-    // For cardio, if user picks the sheet's default header name, clear note so sheet stays tidy
     if (mode === 'cardio' && clean.toLowerCase() === ex.name.toLowerCase()) {
       st.moveName = '';
     } else {
@@ -944,7 +943,7 @@
     selectCircuitMove(val);
   }
 
-  function calcPlates(weight) {
+  function calcPlates(weight, useColor = false) {
     if (!weight || weight <= 45) return 'Bar only';
     const perSide = +( (weight - 45) / 2 ).toFixed(2);
     if (perSide <= 0 || Math.round(perSide * 100) % 125 !== 0) {
@@ -964,13 +963,12 @@
     const out = [];
     for (const p of plates) {
       while (rem >= p - 0.001) {
-        out.push(`<span class="${plateClass[p]}">${p}</span>`);
+        out.push(useColor ? `<span class="${plateClass[p]}">${p}</span>` : `${p}`);
         rem = +(rem - p).toFixed(2);
       }
     }
-    return out.length ? `${out.join('+')} / side` : 'Bar only';
+    return out.length ? `${out.join(' ')} / side` : 'Bar only';
   }
-
 
   function formatDisplayDate(iso) {
     const [y, m, d] = iso.split('-').map(Number);
@@ -1398,9 +1396,9 @@
 
     let statusBadge = '';
     if (complete) {
-      statusBadge = `<span class="badge badge-done">Completed ✓</span>`;
+      statusBadge = `<span class="badge badge-done">Completed &#10003;</span>`;
     } else if (s.date === today) {
-      statusBadge = `<span class="badge badge-next">Today • Next Up</span>`;
+      statusBadge = `<span class="badge badge-next">Today &#8226; Next Up</span>`;
     } else if (currentIdx === targetIdx) {
       statusBadge = `<span class="badge badge-next">Next Up</span>`;
     } else if (s.date < today) {
@@ -1457,7 +1455,7 @@
       const titleHtml = cat === 'cardio'
         ? `<button class="ex-swap-btn ${firstSet.moveModified ? 'modified-move' : ''}" onclick="openMovePicker(${exIdx}, 0, 'cardio')" title="Tap to change modality">
              <span>${activeCardioName}</span>
-             <span style="font-size:11px;color:var(--green);">▾</span>
+             <span style="font-size:11px;color:var(--green);">&#9662;</span>
            </button>`
         : `<div class="ex-name">${ex.name}</div>`;
 
@@ -1467,6 +1465,8 @@
         : isCircuit
           ? `${ex.sets.length} Moves`
           : (topWeight > 0 ? `Top: ${topWeight} lb` : 'Bodyweight');
+
+      const activeSetIdx = ex.sets.findIndex(item => !item.completed);
 
       const rowsHtml = ex.sets.map((st, setIdx) => {
         const displayReps = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 5);
@@ -1480,7 +1480,7 @@
           return `
             <div class="set-row cardio-row">
               <div class="stepper">
-                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
+                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">&#8722;</button>
                 <div class="step-val">
                   <span class="step-main">${displayReps} min</span>
                   <span class="step-hint">Goal: ${st.goal} min</span>
@@ -1488,14 +1488,14 @@
                 <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
               </div>
               <div class="stepper ${st.weightModified ? 'modified-weight' : ''}">
-                <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -${cfg.step})">−</button>
+                <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -${cfg.step})">&#8722;</button>
                 <div class="step-val">
                   <span class="step-main">${distVal} ${cfg.unit}</span>
                   <span class="step-hint">${rateHint}</span>
                 </div>
                 <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, ${cfg.step})">+</button>
               </div>
-              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
+              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">&#10003;</button>
             </div>
           `;
         }
@@ -1507,25 +1507,26 @@
               <button class="move-tag-btn ${st.moveModified ? 'modified-move' : ''}" onclick="openMovePicker(${exIdx}, ${setIdx}, 'circuit')">
                 <span class="move-tag-top">
                   <span>Move ${setIdx + 1}</span>
-                  <span>▾</span>
+                  <span>&#9662;</span>
                 </span>
                 <span class="move-tag-name" style="${st.moveName ? '' : 'color:var(--muted);'}">${moveLbl}</span>
               </button>
               <div class="stepper">
-                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
+                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">&#8722;</button>
                 <div class="step-val">
                   <span class="step-main">${displayReps} reps</span>
                   <span class="step-hint">Goal: ${st.goal}</span>
                 </div>
                 <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
               </div>
-              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
+              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">&#10003;</button>
             </div>
           `;
         }
 
+        const isNextSet = (setIdx === activeSetIdx);
         const weightHint = cat === 'main'
-          ? calcPlates(st.weight)
+          ? calcPlates(st.weight, isNextSet)
           : (st.weight > 0 ? 'Accessory' : 'Bodyweight');
         const fxBadge = (st.hasFormula && !st.weightModified) ? `<span class="fx-dot" title="Formula-linked cell"></span>` : '';
 
@@ -1533,7 +1534,7 @@
           <div class="set-row">
             <div class="set-num">S${setIdx + 1}</div>
             <div class="stepper ${st.weightModified ? 'modified-weight' : ''}">
-              <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -2.5)">−</button>
+              <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -2.5)">&#8722;</button>
               <div class="step-val">
                 <span class="step-main">${st.weight} lb${fxBadge}</span>
                 <span class="step-hint">${weightHint}</span>
@@ -1541,14 +1542,14 @@
               <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, 2.5)">+</button>
             </div>
             <div class="stepper">
-              <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
+              <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">&#8722;</button>
               <div class="step-val">
                 <span class="step-main">${displayReps} reps</span>
                 <span class="step-hint">Goal: ${st.goal}</span>
               </div>
               <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
             </div>
-            <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
+            <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">&#10003;</button>
           </div>
         `;
       }).join('');
@@ -1660,7 +1661,7 @@
     const maxReps = entries.length ? Math.max(...entries.map(e => e.totalReps), 1) : 1;
 
     const barsHtml = entries.length ? `
-      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">Volume & Avg Reps by Movement</div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">Volume &amp; Avg Reps by Movement</div>
       <div class="circuit-bar-list">
         ${entries.map(item => {
           const pct = Math.max(8, Math.round((item.totalReps / maxReps) * 100));
@@ -1690,7 +1691,6 @@
   }
 
   function buildDualLayerExpandedSvg(rawPoints, mode) {
-    // mode: 'main' | 'accessory' | 'cardio'
     const strokeColor = mode === 'cardio' ? '#22c55e' : (mode === 'accessory' ? '#a78bfa' : '#38bdf8');
     const textColor = mode === 'cardio' ? 'var(--green)' : (mode === 'accessory' ? 'var(--purple)' : 'var(--accent)');
     const unit = mode === 'cardio' ? (rawPoints[0]?.rateUnit || '/min') : 'lb';
@@ -1768,7 +1768,7 @@
     const diffStr = diff >= 0 ? `+${diff} ${unit}` : `${diff} ${unit}`;
 
     const legendSub = useWeeklyPeak
-      ? `<span style="font-size:10px;color:var(--muted);">● Weekly Peak Line   ○ Individual Sessions</span>`
+      ? `<span style="font-size:10px;color:var(--muted);">&#9679; Weekly Peak Line &nbsp; &#9675; Individual Sessions</span>`
       : `<span style="font-size:10px;color:var(--muted);">${rawPoints.length} sessions logged</span>`;
 
     return `
@@ -1818,7 +1818,6 @@
     let totalTonnage = 0;
     const activeWeeks = new Set();
 
-    // Compute consecutive completed workout streak up to most recent started/logged session
     let currentStreak = 0;
     for (let i = 0; i < sessions.length; i++) {
       const s = sessions[i];
@@ -1999,9 +1998,9 @@
     const aiCardHtml = `
       <div class="ai-card">
         <div class="ai-header">
-          <div class="ai-title">✨ AI Coach Brief</div>
+          <div class="ai-title">&#10024; AI Coach Brief</div>
           <button class="sync-pill" onclick="forceRefreshAiInsights(event)" ${refreshingInsights ? 'disabled' : ''}>
-            ${refreshingInsights ? 'Analyzing...' : '↻ Update Now'}
+            ${refreshingInsights ? 'Analyzing...' : '&#8635; Update Now'}
           </button>
         </div>
         <ul class="ai-bullet-list">
@@ -2021,14 +2020,14 @@
             <div class="kpi-lbl">Workouts Done</div>
             <div class="kpi-val" style="color:var(--green);margin-top:2px;">${completedWorkouts}</div>
           </div>
-          <span style="font-size:18px;">✓</span>
+          <span style="font-size:18px;">&#10003;</span>
         </div>
         <div class="kpi-box">
           <div>
             <div class="kpi-lbl">Goal Hit Rate</div>
             <div class="kpi-val" style="color:var(--accent);margin-top:2px;">${totalCompletedSets ? goalHitPct + '%' : '—'}</div>
           </div>
-          <span style="font-size:15px;">🎯</span>
+          <span style="font-size:15px;">&#127919;</span>
         </div>
         <div class="kpi-box">
           <div>
@@ -2041,7 +2040,7 @@
             <div class="kpi-lbl">Active Streak</div>
             <div class="kpi-val" style="color:var(--green);margin-top:2px;">${currentStreak} ${currentStreak === 1 ? 'day' : 'days'}</div>
           </div>
-          <span style="font-size:16px;">🔥</span>
+          <span style="font-size:16px;">&#128293;</span>
         </div>
       </div>
     `;
@@ -2072,7 +2071,7 @@
 
     const accessoryNames = Array.from(accessorySet);
     const accHtml = accessoryNames.length ? `
-      <div class="sec-header">Accessories & Circuits (Tap to Expand)</div>
+      <div class="sec-header">Accessories &amp; Circuits (Tap to Expand)</div>
       <div class="stat-grid">
         ${accessoryNames.map(name => {
           const st = accessoryStats[name];
@@ -2117,13 +2116,12 @@
       </div>
     ` : '';
 
-    // Include default sheet cardio modalities even before first log so cards are always visible
     sessions.forEach(s => s.exercises.forEach(ex => {
       if (ex.isCardio) cardioSet.add(ex.name);
     }));
     const cardioNames = Array.from(cardioSet);
     const cardioHtml = cardioNames.length ? `
-      <div class="sec-header">Conditioning & Output (Tap to Expand)</div>
+      <div class="sec-header">Conditioning &amp; Output (Tap to Expand)</div>
       <div class="stat-grid">
         ${cardioNames.map(name => {
           const st = cardioStats[name];
@@ -2184,7 +2182,7 @@
     const started = isSessionStarted(s);
 
     let badgeHtml = '';
-    if (complete) badgeHtml = `<span class="badge badge-done">Completed ✓</span>`;
+    if (complete) badgeHtml = `<span class="badge badge-done">Completed &#10003;</span>`;
     else if (s.date === today || selectedCalendarIdx === targetIdx) badgeHtml = `<span class="badge badge-next">Next Up</span>`;
     else if (s.date < today) badgeHtml = `<span class="badge badge-missed">${started ? 'Partial Past' : 'Past Unlogged'}</span>`;
     else badgeHtml = `<span class="badge badge-upcoming">Upcoming</span>`;
@@ -2251,7 +2249,7 @@
         </div>
         ${exRowsHtml}
         <div class="preview-actions">
-          <button class="preview-open-btn" onclick="jumpToSessionIndex(${selectedCalendarIdx})">Open in Logger →</button>
+          <button class="preview-open-btn" onclick="jumpToSessionIndex(${selectedCalendarIdx})">Open in Logger &#8594;</button>
           <button class="preview-close-btn" onclick="selectCalendarSession(${selectedCalendarIdx})">Close</button>
         </div>
       </div>
@@ -2313,14 +2311,14 @@
 
     box.innerHTML = `
       <div class="cal-header">
-        <button class="nav-arrow" onclick="stepCalendarMonth(-1)">‹</button>
+        <button class="nav-arrow" onclick="stepCalendarMonth(-1)">&#8249;</button>
         <div style="text-align:center;">
           <div class="cal-month-title">${monthNames[calMonth]} ${calYear}</div>
           <div style="font-size:11px;color:var(--muted);font-weight:700;margin-top:2px;">
             ${monthDone} / ${monthTotal} Workouts Completed (${consistencyPct}%)
           </div>
         </div>
-        <button class="nav-arrow" onclick="stepCalendarMonth(1)">›</button>
+        <button class="nav-arrow" onclick="stepCalendarMonth(1)">&#8250;</button>
       </div>
       <div class="cal-grid">${cellsHtml}</div>
       <div class="legend-row">
