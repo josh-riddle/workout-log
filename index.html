@@ -471,13 +471,27 @@
     background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 6px; padding: 3px 7px; color: var(--muted);
   }
-  .move-breakdown-chips {
-    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+
+  /* Circuit Horizontal Bar Breakdown */
+  .circuit-bar-list {
+    display: flex; flex-direction: column; gap: 9px; margin-bottom: 6px;
   }
-  .move-chip {
-    font-size: 10px; font-weight: 700;
-    background: var(--purple-dim); border: 1px solid rgba(167, 139, 250, 0.35);
-    color: #ddd6fe; border-radius: 6px; padding: 3px 7px;
+  .cbar-row {
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .cbar-top {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 11px;
+  }
+  .cbar-name { font-weight: 800; color: var(--text); }
+  .cbar-meta { font-weight: 700; color: var(--muted); font-size: 10px; }
+  .cbar-track {
+    width: 100%; height: 7px; border-radius: 999px;
+    background: var(--surface-2); overflow: hidden;
+  }
+  .cbar-fill {
+    height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--purple), #c4b5fd);
   }
 
   /* Calendar View */
@@ -695,7 +709,7 @@
   let savedSnapshot = '';
   let restSeconds = 0;
   let restInterval = null;
-  let pickerTarget = null; // { exIdx, setIdx }
+  let pickerTarget = null;
 
   function hasValue(v) {
     return v !== '' && v !== null && v !== undefined && !isNaN(Number(v));
@@ -755,9 +769,8 @@
     return allZeroWeight && (hasCircuitName || ex.sets.length >= 2);
   }
 
-  // Smart Carry-Forward: resolves explicit cell note first, otherwise inherits from most recent prior session
   function resolveCarryForwardMoves(list) {
-    const lastKnownByExercise = {}; // { exName: ['Move A', 'Move B', 'Move C'] }
+    const lastKnownByExercise = {};
     list.forEach(s => {
       s.exercises.forEach(ex => {
         if (!isBodyweightCircuit(ex)) return;
@@ -790,7 +803,6 @@
     document.getElementById('movePickerTitle').textContent = `${ex.name} • Move ${setIdx + 1}`;
     document.getElementById('customMoveInput').value = '';
 
-    // Merge Config!J2:J options with any previously used notes in history
     const pool = new Set(circuitOptions);
     sessions.forEach(s => s.exercises.forEach(e => {
       if (e.name === ex.name) {
@@ -1503,11 +1515,52 @@
     `;
   }
 
-  function buildDualLayerExpandedSvg(rawPoints, isAccessory, isCircuit, moveTotalsMap) {
+  function buildCircuitExpandedHtml(rawPoints, moveStatsMap) {
+    if (!rawPoints || rawPoints.length === 0) {
+      return `<div style="text-align:center;padding:16px 0;color:var(--muted);font-size:12px;">Complete at least 1 circuit move to view breakdown.</div>`;
+    }
+
+    const entries = Object.entries(moveStatsMap || {})
+      .map(([name, info]) => ({ name, ...info }))
+      .sort((a, b) => b.totalReps - a.totalReps);
+
+    const maxReps = entries.length ? Math.max(...entries.map(e => e.totalReps), 1) : 1;
+
+    const barsHtml = entries.length ? `
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">Volume & Avg Reps by Movement</div>
+      <div class="circuit-bar-list">
+        ${entries.map(item => {
+          const pct = Math.max(8, Math.round((item.totalReps / maxReps) * 100));
+          const avg = Math.round(item.totalReps / Math.max(1, item.count));
+          return `
+            <div class="cbar-row">
+              <div class="cbar-top">
+                <span class="cbar-name">${item.name}</span>
+                <span class="cbar-meta">${item.count}× • ${item.totalReps} reps (avg ${avg})</span>
+              </div>
+              <div class="cbar-track"><div class="cbar-fill" style="width:${pct}%"></div></div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : '';
+
+    const pillsHtml = `
+      <div class="history-pills">
+        ${rawPoints.slice().reverse().map(p => `
+          <span class="hist-pill">${p.date.slice(5)}: <b>${p.pillText}</b> (${p.metric}%)</span>
+        `).join('')}
+      </div>
+    `;
+
+    return `${barsHtml}${pillsHtml}`;
+  }
+
+  function buildDualLayerExpandedSvg(rawPoints, isAccessory) {
     const strokeColor = isAccessory ? '#a78bfa' : '#38bdf8';
     const textColor = isAccessory ? 'var(--purple)' : 'var(--accent)';
-    const unit = isCircuit ? 'reps' : 'lb';
-    const metricLabel = isCircuit ? 'Circuit Reps' : (isAccessory ? 'Session Vol' : 'Weekly Peak e1RM');
+    const unit = 'lb';
+    const metricLabel = isAccessory ? 'Top Working Weight' : 'Weekly Peak e1RM';
     const gradId = isAccessory ? 'areaGradAcc' : 'areaGradMain';
     const useWeeklyPeak = !isAccessory;
 
@@ -1515,18 +1568,10 @@
       return `<div style="text-align:center;padding:16px 0;color:var(--muted);font-size:12px;">Complete at least 1 set to plot progression.</div>`;
     }
 
-    const breakdownHtml = (isCircuit && moveTotalsMap && Object.keys(moveTotalsMap).length > 0)
-      ? `<div class="move-breakdown-chips">
-          ${Object.entries(moveTotalsMap).map(([mName, mReps]) => `
-            <span class="move-chip">${mName}: <b>${mReps} reps</b></span>
-          `).join('')}
-        </div>`
-      : '';
-
     const pillsHtml = `
       <div class="history-pills">
         ${rawPoints.slice().reverse().map(p => `
-          <span class="hist-pill">${p.date.slice(5)}: <b>${p.pillText || (p.weight > 0 ? `${p.weight}×${p.reps}` : `${p.reps}r`)}</b> (${p.metric} ${unit})</span>
+          <span class="hist-pill">${p.date.slice(5)}: <b>${p.weight > 0 ? `${p.weight}×${p.reps}` : `${p.reps}r`}</b>${!isAccessory ? ` (${p.metric} ${unit})` : ''}</span>
         `).join('')}
       </div>
     `;
@@ -1538,9 +1583,8 @@
       return `
         <div style="text-align:center;padding:12px 0 4px 0;">
           <div style="font-size:18px;font-weight:900;color:${textColor};">${p.metric} ${unit} <span style="font-size:11px;color:var(--muted);">${metricLabel}</span></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Logged ${p.pillText || (p.weight > 0 ? `${p.weight} lb × ${p.reps} reps` : `${p.reps} reps`)} on ${p.date}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Logged ${p.weight > 0 ? `${p.weight} lb × ${p.reps} reps` : `${p.reps} reps`} on ${p.date}</div>
         </div>
-        ${breakdownHtml}
         ${pillsHtml}
       `;
     }
@@ -1583,7 +1627,7 @@
 
     const first = linePoints[0];
     const latest = linePoints[linePoints.length - 1];
-    const diff = latest.metric - first.metric;
+    const diff = +(latest.metric - first.metric).toFixed(1);
     const diffStr = diff >= 0 ? `+${diff} ${unit}` : `${diff} ${unit}`;
 
     const legendSub = useWeeklyPeak
@@ -1612,7 +1656,6 @@
         <span>${first.date} (${first.metric} ${unit})</span>
         <span>${latest.date} (${latest.metric} ${unit})</span>
       </div>
-      ${breakdownHtml}
       ${pillsHtml}
     `;
   }
@@ -1631,13 +1674,16 @@
     });
 
     let completedWorkouts = 0;
-    let compoundTonnage = 0;
-    let accessoryTonnage = 0;
+    let totalCompletedSets = 0;
+    let totalGoalsMetSets = 0;
+    let totalTonnage = 0;
+    const activeWeeks = new Set();
     let cardioMinutes = 0;
 
     sessions.forEach(s => {
       if (isSessionComplete(s)) completedWorkouts++;
       let liftRank = 0;
+      let sessionHasCompletedWork = false;
 
       s.exercises.forEach(ex => {
         const cat = getExerciseCategory(ex, liftRank);
@@ -1652,30 +1698,35 @@
               isCircuit: circuitFlag,
               bestWeight: 0,
               bestReps: 0,
-              totalVol: 0,
+              firstWeight: null,
+              latestWeight: 0,
               totalReps: 0,
-              circuitsCompleted: 0,
-              bestSessionCircuitReps: 0,
-              moveTotals: {}
+              totalGoalReps: 0,
+              moveStats: {}
             };
           }
           if (!historyMap[ex.name]) historyMap[ex.name] = [];
         }
 
         let sessionMainBest = null;
-        let sessionAccVol = 0;
         let sessionAccTop = { weight: 0, reps: 0 };
         let sessionMoveParts = [];
-        let completedMovesCount = 0;
+        let sessionCircuitReps = 0;
+        let sessionCircuitGoal = 0;
 
         ex.sets.forEach((st, setIdx) => {
           if (!st.completed) return;
+          sessionHasCompletedWork = true;
           const r = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 0);
+          const g = Number(st.goal || 0);
+
+          totalCompletedSets++;
+          if (g <= 0 || r >= g) totalGoalsMetSets++;
 
           if (cat === 'cardio') {
             cardioMinutes += r;
           } else if (cat === 'main') {
-            if (st.weight > 0) compoundTonnage += st.weight * r;
+            if (st.weight > 0) totalTonnage += st.weight * r;
             if (mainBestMap[ex.name] && st.weight > 0 && r > 0) {
               const est = Math.round(st.weight * (1 + r / 30));
               if (est > mainBestMap[ex.name].e1rm) {
@@ -1686,16 +1737,19 @@
               }
             }
           } else if (cat === 'accessory') {
-            const setVol = st.weight > 0 ? st.weight * r : r;
-            if (st.weight > 0) accessoryTonnage += setVol;
-            sessionAccVol += setVol;
-            accessoryStats[ex.name].totalVol += (st.weight > 0 ? st.weight * r : 0);
+            if (st.weight > 0) totalTonnage += st.weight * r;
             accessoryStats[ex.name].totalReps += r;
-            completedMovesCount++;
+            accessoryStats[ex.name].totalGoalReps += (g > 0 ? g : r);
+            sessionCircuitReps += r;
+            sessionCircuitGoal += (g > 0 ? g : r);
 
             const mLabel = st.moveName || `Move ${setIdx + 1}`;
             sessionMoveParts.push(`${mLabel} (${r})`);
-            accessoryStats[ex.name].moveTotals[mLabel] = (accessoryStats[ex.name].moveTotals[mLabel] || 0) + r;
+            if (!accessoryStats[ex.name].moveStats[mLabel]) {
+              accessoryStats[ex.name].moveStats[mLabel] = { totalReps: 0, count: 0 };
+            }
+            accessoryStats[ex.name].moveStats[mLabel].totalReps += r;
+            accessoryStats[ex.name].moveStats[mLabel].count += 1;
 
             if (st.weight > accessoryStats[ex.name].bestWeight ||
                (st.weight === accessoryStats[ex.name].bestWeight && r > accessoryStats[ex.name].bestReps)) {
@@ -1712,25 +1766,38 @@
         if (sessionMainBest && historyMap[ex.name]) {
           historyMap[ex.name].push(sessionMainBest);
         }
-        if (cat === 'accessory' && sessionAccVol > 0) {
+        if (cat === 'accessory' && sessionCircuitReps > 0) {
           if (circuitFlag) {
-            if (completedMovesCount >= ex.sets.length) {
-              accessoryStats[ex.name].circuitsCompleted++;
+            const hitPct = sessionCircuitGoal > 0 ? Math.min(100, Math.round((sessionCircuitReps / sessionCircuitGoal) * 100)) : 100;
+            historyMap[ex.name].push({
+              date: s.date,
+              weight: 0,
+              reps: sessionCircuitReps,
+              metric: hitPct,
+              pillText: sessionMoveParts.join(' • ')
+            });
+          } else if (sessionAccTop.weight > 0) {
+            if (accessoryStats[ex.name].firstWeight === null) {
+              accessoryStats[ex.name].firstWeight = sessionAccTop.weight;
             }
-            if (sessionAccVol > accessoryStats[ex.name].bestSessionCircuitReps) {
-              accessoryStats[ex.name].bestSessionCircuitReps = sessionAccVol;
-            }
+            accessoryStats[ex.name].latestWeight = sessionAccTop.weight;
+            historyMap[ex.name].push({
+              date: s.date,
+              weight: sessionAccTop.weight,
+              reps: sessionAccTop.reps,
+              metric: sessionAccTop.weight
+            });
           }
-          historyMap[ex.name].push({
-            date: s.date,
-            weight: sessionAccTop.weight,
-            reps: sessionAccTop.reps,
-            metric: Math.round(sessionAccVol),
-            pillText: circuitFlag ? sessionMoveParts.join(' • ') : null
-          });
         }
       });
+
+      if (sessionHasCompletedWork) {
+        activeWeeks.add(getMondayWeekKey(s.date));
+      }
     });
+
+    const goalHitPct = totalCompletedSets > 0 ? Math.round((totalGoalsMetSets / totalCompletedSets) * 100) : 0;
+    const weeklyAvgTonnage = activeWeeks.size > 0 ? (totalTonnage / activeWeeks.size) : 0;
 
     const bullets = (aiInsights && Array.isArray(aiInsights.bullets) && aiInsights.bullets.length)
       ? aiInsights.bullets
@@ -1766,22 +1833,23 @@
         </div>
         <div class="kpi-box">
           <div>
+            <div class="kpi-lbl">Goal Hit Rate</div>
+            <div class="kpi-val" style="color:var(--accent);margin-top:2px;">${totalCompletedSets ? goalHitPct + '%' : '—'}</div>
+          </div>
+          <span style="font-size:15px;">🎯</span>
+        </div>
+        <div class="kpi-box">
+          <div>
+            <div class="kpi-lbl">Weekly Avg Vol</div>
+            <div class="kpi-val" style="color:var(--purple);margin-top:2px;">${activeWeeks.size ? formatShortTon(weeklyAvgTonnage) : '—'}</div>
+          </div>
+        </div>
+        <div class="kpi-box">
+          <div>
             <div class="kpi-lbl">Cardio Logged</div>
             <div class="kpi-val" style="color:var(--green);margin-top:2px;">${cardioMinutes} min</div>
           </div>
           <span style="font-size:16px;">⏱</span>
-        </div>
-        <div class="kpi-box">
-          <div>
-            <div class="kpi-lbl">Compound Vol</div>
-            <div class="kpi-val" style="color:var(--accent);margin-top:2px;">${formatShortTon(compoundTonnage)}</div>
-          </div>
-        </div>
-        <div class="kpi-box">
-          <div>
-            <div class="kpi-lbl">Accessory Vol</div>
-            <div class="kpi-val" style="color:var(--purple);margin-top:2px;">${formatShortTon(accessoryTonnage)}</div>
-          </div>
         </div>
       </div>
     `;
@@ -1803,7 +1871,7 @@
             ${b.e1rm ? `Peak: ${b.weight} × ${b.reps} (${b.date.slice(5)})` : 'No logged sets'}
           </div>
           ${isExpanded
-            ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, false, false, null)}</div>`
+            ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, false)}</div>`
             : `<div class="mini-spark-wrap">${buildDualLayerSparklineSvg(pts, '#38bdf8', true)}</div>`
           }
         </div>
@@ -1826,11 +1894,16 @@
 
           if (hasLogs) {
             if (st.isCircuit) {
-              topHeadline = `${st.bestSessionCircuitReps} reps`;
-              subLine = `${st.circuitsCompleted} circuit${st.circuitsCompleted === 1 ? '' : 's'} • ${st.totalReps} total reps`;
+              const distinctCount = Object.keys(st.moveStats).length;
+              const circuitHit = st.totalGoalReps > 0 ? Math.min(100, Math.round((st.totalReps / st.totalGoalReps) * 100)) : 100;
+              topHeadline = `${distinctCount} Move${distinctCount === 1 ? '' : 's'}`;
+              subLine = `${circuitHit}% goal hit • ${st.totalReps} reps`;
             } else {
               topHeadline = st.bestWeight > 0 ? `${st.bestWeight} lb × ${st.bestReps}` : `${st.bestReps} reps`;
-              subLine = st.totalVol > 0 ? `Total Vol: ${formatShortTon(st.totalVol)}` : `Total Reps: ${st.totalReps}`;
+              const delta = (st.firstWeight !== null) ? +(st.latestWeight - st.firstWeight).toFixed(1) : 0;
+              subLine = delta > 0
+                ? `+${delta} lb since start`
+                : (st.bestWeight > 0 ? `Baseline: ${st.bestWeight} lb` : `Logged ${st.totalReps} reps`);
             }
           }
 
@@ -1843,7 +1916,7 @@
               <div class="stat-num" style="color:var(--purple);">${topHeadline}</div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px;">${subLine}</div>
               ${isExpanded
-                ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, true, st.isCircuit, st.moveTotals)}</div>`
+                ? `<div class="expanded-detail">${st.isCircuit ? buildCircuitExpandedHtml(pts, st.moveStats) : buildDualLayerExpandedSvg(pts, true)}</div>`
                 : `<div class="mini-spark-wrap">${buildDualLayerSparklineSvg(pts, '#a78bfa', false)}</div>`
               }
             </div>
