@@ -225,9 +225,13 @@
     background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 10px; padding: 4px;
   }
+  .stepper.active-weight {
+    border-color: rgba(56, 189, 248, 0.45);
+  }
   .stepper.modified-weight {
     border-color: rgba(245, 158, 11, 0.6);
   }
+
   .step-btn {
     width: 28px; height: 28px; border-radius: 7px; border: none;
     background: var(--bg); color: var(--text); font-weight: 800; font-size: 15px;
@@ -253,7 +257,7 @@
   .plate-25 { color: #facc15; font-weight: 800; } /* Yellow */
   .plate-10 { color: #4ade80; font-weight: 800; } /* Green */
   .plate-1-25 { color: #facc15; font-weight: 800; } /* Yellow Micro */
-  .plate-std { color: var(--muted); font-weight: 700; } /* 5 & 2.5 lb */
+  .plate-std { color: #f1f5f9; font-weight: 800; } /* 5 & 2.5 lb */
 
   .check-btn {
     width: 46px; height: 42px; border-radius: 11px;
@@ -1533,7 +1537,7 @@
         return `
           <div class="set-row">
             <div class="set-num">S${setIdx + 1}</div>
-            <div class="stepper ${st.weightModified ? 'modified-weight' : ''}">
+            <div class="stepper ${(cat === 'main' && isNextSet) ? 'active-weight' : ''} ${st.weightModified ? 'modified-weight' : ''}">
               <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -2.5)">&#8722;</button>
               <div class="step-val">
                 <span class="step-main">${st.weight} lb${fxBadge}</span>
@@ -1541,6 +1545,7 @@
               </div>
               <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, 2.5)">+</button>
             </div>
+
             <div class="stepper">
               <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">&#8722;</button>
               <div class="step-val">
