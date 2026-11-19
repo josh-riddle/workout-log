@@ -150,6 +150,16 @@
   }
   .ex-title-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .ex-name { font-size: 16px; font-weight: 800; }
+  .ex-swap-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 9px; padding: 5px 10px;
+    color: var(--text); font-size: 14px; font-weight: 800;
+    cursor: pointer;
+  }
+  .ex-swap-btn.modified-move {
+    border-color: rgba(34, 197, 94, 0.65);
+  }
   .cat-tag {
     font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px;
     text-transform: uppercase; letter-spacing: 0.4px;
@@ -167,7 +177,7 @@
     border-top: 1px solid rgba(40, 50, 68, 0.6);
   }
   .set-row.cardio-row {
-    grid-template-columns: 30px 1fr 48px;
+    grid-template-columns: 1fr 1fr 48px;
   }
   .set-row.circuit-row {
     grid-template-columns: minmax(96px, 1.15fr) 1.15fr 48px;
@@ -252,7 +262,7 @@
     box-shadow: 0 0 12px rgba(34, 197, 94, 0.35);
   }
 
-  /* Native PWA Circuit Move Picker Modal */
+  /* Native PWA Exercise Picker Modal */
   .modal-backdrop {
     position: fixed; inset: 0; z-index: 60;
     background: rgba(5, 8, 14, 0.78);
@@ -299,6 +309,11 @@
     border-color: var(--purple);
     background: var(--purple-dim);
     color: #ede9fe;
+  }
+  .option-item.selected-cardio {
+    border-color: var(--green);
+    background: var(--green-dim);
+    color: #dcfce7;
   }
   .custom-move-row {
     display: flex; gap: 8px; margin-top: 8px;
@@ -448,6 +463,9 @@
   }
   .stat-box.expanded.acc-box {
     border-color: rgba(167, 139, 250, 0.55);
+  }
+  .stat-box.expanded.cardio-box {
+    border-color: rgba(34, 197, 94, 0.55);
   }
   .stat-top-row {
     display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;
@@ -645,17 +663,17 @@
   </div>
 </div>
 
-<!-- CIRCUIT EXERCISE PICKER MODAL -->
+<!-- EXERCISE PICKER MODAL (CIRCUIT & CARDIO) -->
 <div id="movePickerModal" class="modal-backdrop" onclick="closeMovePicker(event)">
   <div class="modal-sheet" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <div id="movePickerTitle" class="modal-title">Select Move 1</div>
+      <div id="movePickerTitle" class="modal-title">Select Exercise</div>
       <button class="modal-close" onclick="closeMovePicker()">Cancel</button>
     </div>
     <div id="movePickerOptions" class="option-list"></div>
-    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;">Or Enter Custom Move</div>
+    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;">Or Enter Custom Exercise</div>
     <div class="custom-move-row">
-      <input id="customMoveInput" class="custom-move-input" type="text" placeholder="e.g., Landmine Anti-Rot." />
+      <input id="customMoveInput" class="custom-move-input" type="text" placeholder="Type exercise name..." />
       <button class="custom-move-apply" onclick="applyCustomMove()">Set</button>
     </div>
   </div>
@@ -695,6 +713,7 @@
 
   let sessions = [];
   let circuitOptions = [];
+  let cardioOptions = [];
   let isOffline = false;
   let aiInsights = null;
   let refreshingInsights = false;
@@ -709,7 +728,7 @@
   let savedSnapshot = '';
   let restSeconds = 0;
   let restInterval = null;
-  let pickerTarget = null;
+  let pickerTarget = null; // { exIdx, setIdx, mode: 'circuit' | 'cardio' }
 
   function hasValue(v) {
     return v !== '' && v !== null && v !== undefined && !isNaN(Number(v));
@@ -769,6 +788,33 @@
     return allZeroWeight && (hasCircuitName || ex.sets.length >= 2);
   }
 
+  function getCardioConfig(modalityName) {
+    const n = String(modalityName || '').toLowerCase();
+    if (/(stair|step|climb)/i.test(n)) {
+      return { unit: 'floors', step: 1, decimals: 0, rateUnit: 'flr/min', rateType: 'rate' };
+    }
+    if (/(assault|air|bike|cycle|erg|ski)/i.test(n)) {
+      return { unit: 'cal', step: 5, decimals: 0, rateUnit: 'cal/min', rateType: 'rate' };
+    }
+    if (/(run|jog|sprint|treadmill|walk|row)/i.test(n)) {
+      return { unit: 'mi', step: 0.1, decimals: 1, rateUnit: '/mi', rateType: 'pace' };
+    }
+    return { unit: 'dist', step: 0.1, decimals: 1, rateUnit: '/min', rateType: 'rate' };
+  }
+
+  function formatPaceOrRate(mins, dist, cfg) {
+    if (!dist || dist <= 0 || !mins || mins <= 0) return `0 ${cfg.rateUnit}`;
+    if (cfg.rateType === 'pace') {
+      const paceDecimal = mins / dist;
+      const pMin = Math.floor(paceDecimal);
+      const pSec = Math.round((paceDecimal - pMin) * 60);
+      const secStr = String(pSec === 60 ? 0 : pSec).padStart(2, '0');
+      const minAdj = pSec === 60 ? pMin + 1 : pMin;
+      return `${minAdj}:${secStr} /mi`;
+    }
+    return `${(dist / mins).toFixed(1)} ${cfg.rateUnit}`;
+  }
+
   function resolveCarryForwardMoves(list) {
     const lastKnownByExercise = {};
     list.forEach(s => {
@@ -794,37 +840,57 @@
     });
   }
 
-  function openMovePicker(exIdx, setIdx) {
-    pickerTarget = { exIdx, setIdx };
+  function openMovePicker(exIdx, setIdx, mode = 'circuit') {
+    pickerTarget = { exIdx, setIdx, mode };
     const ex = sessions[currentIdx].exercises[exIdx];
     const st = ex.sets[setIdx];
-    const currentMove = String(st.moveName || '').trim();
+    const currentMove = String(st.moveName || (mode === 'cardio' ? ex.name : '')).trim();
 
-    document.getElementById('movePickerTitle').textContent = `${ex.name} • Move ${setIdx + 1}`;
+    document.getElementById('movePickerTitle').textContent = mode === 'cardio'
+      ? 'Select Conditioning Modality'
+      : `${ex.name} • Move ${setIdx + 1}`;
     document.getElementById('customMoveInput').value = '';
+    document.getElementById('customMoveInput').placeholder = mode === 'cardio'
+      ? 'e.g., Rowing Erg, Heavy Bag'
+      : 'e.g., Landmine Anti-Rot.';
 
-    const pool = new Set(circuitOptions);
-    sessions.forEach(s => s.exercises.forEach(e => {
-      if (e.name === ex.name) {
-        e.sets.forEach(setItem => {
-          if (setItem.moveName) pool.add(String(setItem.moveName).trim());
-        });
-      }
-    }));
+    const pool = new Set(mode === 'cardio' ? cardioOptions : circuitOptions);
+    if (mode === 'cardio') {
+      pool.add(ex.name);
+      sessions.forEach(s => s.exercises.forEach(e => {
+        if (e.isCardio) {
+          pool.add(e.name);
+          e.sets.forEach(setItem => {
+            if (setItem.moveName) pool.add(String(setItem.moveName).trim());
+          });
+        }
+      }));
+    } else {
+      sessions.forEach(s => s.exercises.forEach(e => {
+        if (e.name === ex.name) {
+          e.sets.forEach(setItem => {
+            if (setItem.moveName) pool.add(String(setItem.moveName).trim());
+          });
+        }
+      }));
+    }
 
     const optionsList = Array.from(pool).filter(Boolean);
     const listEl = document.getElementById('movePickerOptions');
+    const selectedCls = mode === 'cardio' ? 'selected-cardio' : 'selected';
+    const checkColor = mode === 'cardio' ? 'var(--green)' : 'var(--purple)';
 
     if (optionsList.length === 0) {
-      listEl.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:6px 0;">No exercises found in <b>Config!J2:J</b> yet. Type a move below to add it now.</div>`;
+      const colRef = mode === 'cardio' ? 'Config!L2:L' : 'Config!J2:J';
+      listEl.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:6px 0;">No exercises found in <b>${colRef}</b> yet. Type one below to set it now.</div>`;
     } else {
       listEl.innerHTML = optionsList.map(opt => {
         const isSelected = opt.toLowerCase() === currentMove.toLowerCase();
         const safeOpt = opt.replace(/'/g, "\\'");
         return `
-          <button class="option-item ${isSelected ? 'selected' : ''}" onclick="selectCircuitMove('${safeOpt}')">
+          <button class="option-item ${isSelected ? selectedCls : ''}" onclick="selectCircuitMove('${safeOpt}')">
             <span>${opt}</span>
-            ${isSelected ? '<span style="color:var(--purple);font-size:12px;">Selected ✓</span>' : ''}
+            ${isSelected ? `<span style="color:${checkColor};font-size:12px;">Selected ✓</span>` : ''}
           </button>
         `;
       }).join('');
@@ -841,10 +907,19 @@
 
   function selectCircuitMove(moveName) {
     if (!pickerTarget) return;
-    const { exIdx, setIdx } = pickerTarget;
-    const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
+    const { exIdx, setIdx, mode } = pickerTarget;
+    const ex = sessions[currentIdx].exercises[exIdx];
+    const st = ex.sets[setIdx];
     if (st.origMoveName === undefined) st.origMoveName = String(st.moveName || '');
-    st.moveName = String(moveName || '').trim();
+
+    const clean = String(moveName || '').trim();
+    // For cardio, if user picks the sheet's default header name, clear note so sheet stays tidy
+    if (mode === 'cardio' && clean.toLowerCase() === ex.name.toLowerCase()) {
+      st.moveName = '';
+    } else {
+      st.moveName = clean;
+    }
+
     st.isInherited = false;
     st.moveModified = (st.moveName !== st.origMoveName);
 
@@ -980,6 +1055,9 @@
       const cachedOpts = localStorage.getItem('gymlog_circuit_opts');
       if (cachedOpts) circuitOptions = JSON.parse(cachedOpts);
 
+      const cachedCardio = localStorage.getItem('gymlog_cardio_opts');
+      if (cachedCardio) cardioOptions = JSON.parse(cachedCardio);
+
       const cached = localStorage.getItem('gymlog_cache');
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -1023,6 +1101,10 @@
         if (Array.isArray(res.circuitOptions)) {
           circuitOptions = res.circuitOptions;
           localStorage.setItem('gymlog_circuit_opts', JSON.stringify(circuitOptions));
+        }
+        if (Array.isArray(res.cardioOptions)) {
+          cardioOptions = res.cardioOptions;
+          localStorage.setItem('gymlog_cardio_opts', JSON.stringify(cardioOptions));
         }
         if (res.aiInsights) {
           aiInsights = res.aiInsights;
@@ -1136,7 +1218,7 @@
   function adjustWeight(exIdx, setIdx, delta) {
     const st = sessions[currentIdx].exercises[exIdx].sets[setIdx];
     if (st.origWeight === undefined) st.origWeight = Number(st.weight || 0);
-    st.weight = Math.max(0, +(st.weight + delta).toFixed(1));
+    st.weight = Math.max(0, +(st.weight + delta).toFixed(2));
     st.weightModified = (st.weight !== st.origWeight);
     syncDirtyState();
     render();
@@ -1189,6 +1271,10 @@
         if (Array.isArray(res.circuitOptions)) {
           circuitOptions = res.circuitOptions;
           localStorage.setItem('gymlog_circuit_opts', JSON.stringify(circuitOptions));
+        }
+        if (Array.isArray(res.cardioOptions)) {
+          cardioOptions = res.cardioOptions;
+          localStorage.setItem('gymlog_cardio_opts', JSON.stringify(cardioOptions));
         }
         const activeId = session.id;
         sessions = res.sessions;
@@ -1340,9 +1426,19 @@
           ? `<span class="cat-tag cat-acc">${isCircuit ? 'Circuit' : 'Accessory'}</span>`
           : `<span class="cat-tag cat-cardio">Cardio</span>`;
 
+      const firstSet = ex.sets[0] || {};
+      const activeCardioName = cat === 'cardio' ? (firstSet.moveName || ex.name) : ex.name;
+
+      const titleHtml = cat === 'cardio'
+        ? `<button class="ex-swap-btn ${firstSet.moveModified ? 'modified-move' : ''}" onclick="openMovePicker(${exIdx}, 0, 'cardio')" title="Tap to change modality">
+             <span>${activeCardioName}</span>
+             <span style="font-size:11px;color:var(--green);">▾</span>
+           </button>`
+        : `<div class="ex-name">${ex.name}</div>`;
+
       const topWeight = Math.max(...ex.sets.map(st => st.weight || 0));
       const rightLabel = cat === 'cardio'
-        ? `Goal: ${ex.sets[0]?.goal || 15} min`
+        ? `Goal: ${firstSet.goal || 15} min`
         : isCircuit
           ? `${ex.sets.length} Moves`
           : (topWeight > 0 ? `Top: ${topWeight} lb` : 'Bodyweight');
@@ -1351,9 +1447,13 @@
         const displayReps = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 5);
 
         if (cat === 'cardio') {
+          const modName = st.moveName || ex.name;
+          const cfg = getCardioConfig(modName);
+          const distVal = cfg.decimals > 0 ? Number(st.weight || 0).toFixed(cfg.decimals) : Math.round(Number(st.weight || 0));
+          const rateHint = formatPaceOrRate(displayReps, Number(st.weight || 0), cfg);
+
           return `
             <div class="set-row cardio-row">
-              <div class="set-num">S${setIdx + 1}</div>
               <div class="stepper">
                 <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
                 <div class="step-val">
@@ -1361,6 +1461,14 @@
                   <span class="step-hint">Goal: ${st.goal} min</span>
                 </div>
                 <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
+              </div>
+              <div class="stepper ${st.weightModified ? 'modified-weight' : ''}">
+                <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -${cfg.step})">−</button>
+                <div class="step-val">
+                  <span class="step-main">${distVal} ${cfg.unit}</span>
+                  <span class="step-hint">${rateHint}</span>
+                </div>
+                <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, ${cfg.step})">+</button>
               </div>
               <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
             </div>
@@ -1371,7 +1479,7 @@
           const moveLbl = st.moveName || `Select Move ${setIdx + 1}`;
           return `
             <div class="set-row circuit-row">
-              <button class="move-tag-btn ${st.moveModified ? 'modified-move' : ''}" onclick="openMovePicker(${exIdx}, ${setIdx})">
+              <button class="move-tag-btn ${st.moveModified ? 'modified-move' : ''}" onclick="openMovePicker(${exIdx}, ${setIdx}, 'circuit')">
                 <span class="move-tag-top">
                   <span>Move ${setIdx + 1}</span>
                   <span>▾</span>
@@ -1425,7 +1533,7 @@
         <div id="ex-card-${exIdx}" class="ex-card">
           <div class="ex-header">
             <div class="ex-title-group">
-              <div class="ex-name">${ex.name}</div>
+              ${titleHtml}
               ${tagHtml}
             </div>
             <div class="ex-sub">${rightLabel}</div>
@@ -1556,13 +1664,16 @@
     return `${barsHtml}${pillsHtml}`;
   }
 
-  function buildDualLayerExpandedSvg(rawPoints, isAccessory) {
-    const strokeColor = isAccessory ? '#a78bfa' : '#38bdf8';
-    const textColor = isAccessory ? 'var(--purple)' : 'var(--accent)';
-    const unit = 'lb';
-    const metricLabel = isAccessory ? 'Top Working Weight' : 'Weekly Peak e1RM';
-    const gradId = isAccessory ? 'areaGradAcc' : 'areaGradMain';
-    const useWeeklyPeak = !isAccessory;
+  function buildDualLayerExpandedSvg(rawPoints, mode) {
+    // mode: 'main' | 'accessory' | 'cardio'
+    const strokeColor = mode === 'cardio' ? '#22c55e' : (mode === 'accessory' ? '#a78bfa' : '#38bdf8');
+    const textColor = mode === 'cardio' ? 'var(--green)' : (mode === 'accessory' ? 'var(--purple)' : 'var(--accent)');
+    const unit = mode === 'cardio' ? (rawPoints[0]?.rateUnit || '/min') : 'lb';
+    const metricLabel = mode === 'cardio'
+      ? 'Output Rate'
+      : (mode === 'accessory' ? 'Top Working Weight' : 'Weekly Peak e1RM');
+    const gradId = mode === 'cardio' ? 'areaGradCardio' : (mode === 'accessory' ? 'areaGradAcc' : 'areaGradMain');
+    const useWeeklyPeak = (mode === 'main');
 
     if (!rawPoints || rawPoints.length === 0) {
       return `<div style="text-align:center;padding:16px 0;color:var(--muted);font-size:12px;">Complete at least 1 set to plot progression.</div>`;
@@ -1571,7 +1682,7 @@
     const pillsHtml = `
       <div class="history-pills">
         ${rawPoints.slice().reverse().map(p => `
-          <span class="hist-pill">${p.date.slice(5)}: <b>${p.weight > 0 ? `${p.weight}×${p.reps}` : `${p.reps}r`}</b>${!isAccessory ? ` (${p.metric} ${unit})` : ''}</span>
+          <span class="hist-pill">${p.date.slice(5)}: <b>${p.pillText || (p.weight > 0 ? `${p.weight}×${p.reps}` : `${p.reps}r`)}</b>${mode === 'main' ? ` (${p.metric} lb)` : ''}</span>
         `).join('')}
       </div>
     `;
@@ -1582,8 +1693,8 @@
       const p = linePoints[0];
       return `
         <div style="text-align:center;padding:12px 0 4px 0;">
-          <div style="font-size:18px;font-weight:900;color:${textColor};">${p.metric} ${unit} <span style="font-size:11px;color:var(--muted);">${metricLabel}</span></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Logged ${p.weight > 0 ? `${p.weight} lb × ${p.reps} reps` : `${p.reps} reps`} on ${p.date}</div>
+          <div style="font-size:18px;font-weight:900;color:${textColor};">${p.displayMetric || (p.metric + ' ' + unit)} <span style="font-size:11px;color:var(--muted);">${metricLabel}</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Logged ${p.pillText || (p.weight > 0 ? `${p.weight} lb × ${p.reps} reps` : `${p.reps} reps`)} on ${p.date}</div>
         </div>
         ${pillsHtml}
       `;
@@ -1591,9 +1702,10 @@
 
     const w = 320, h = 118, padX = 16, padY = 16;
     const allVals = rawPoints.map(p => p.metric);
-    const minV = Math.min(...allVals) - 5;
-    const maxV = Math.max(...allVals) + 5;
-    const span = Math.max(1, maxV - minV);
+    const padVal = Math.max(1, (Math.max(...allVals) - Math.min(...allVals)) * 0.15);
+    const minV = Math.min(...allVals) - padVal;
+    const maxV = Math.max(...allVals) + padVal;
+    const span = Math.max(0.1, maxV - minV);
 
     const minT = isoToEpoch(rawPoints[0].date);
     const maxT = isoToEpoch(rawPoints[rawPoints.length - 1].date);
@@ -1627,7 +1739,7 @@
 
     const first = linePoints[0];
     const latest = linePoints[linePoints.length - 1];
-    const diff = +(latest.metric - first.metric).toFixed(1);
+    const diff = +(latest.metric - first.metric).toFixed(2);
     const diffStr = diff >= 0 ? `+${diff} ${unit}` : `${diff} ${unit}`;
 
     const legendSub = useWeeklyPeak
@@ -1653,8 +1765,8 @@
         ${peakDotsSvg}
       </svg>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px;">
-        <span>${first.date} (${first.metric} ${unit})</span>
-        <span>${latest.date} (${latest.metric} ${unit})</span>
+        <span>${first.date} (${first.displayMetric || (first.metric + ' ' + unit)})</span>
+        <span>${latest.date} (${latest.displayMetric || (latest.metric + ' ' + unit)})</span>
       </div>
       ${pillsHtml}
     `;
@@ -1667,6 +1779,8 @@
     const historyMap = {};
     const accessorySet = new Set();
     const accessoryStats = {};
+    const cardioSet = new Set();
+    const cardioStats = {};
 
     mainLifts.forEach(l => {
       mainBestMap[l] = { weight: 0, reps: 0, e1rm: 0, date: '' };
@@ -1678,7 +1792,19 @@
     let totalGoalsMetSets = 0;
     let totalTonnage = 0;
     const activeWeeks = new Set();
-    let cardioMinutes = 0;
+
+    // Compute consecutive completed workout streak up to most recent started/logged session
+    let currentStreak = 0;
+    for (let i = 0; i < sessions.length; i++) {
+      const s = sessions[i];
+      if (isSessionComplete(s)) {
+        currentStreak++;
+      } else if (isSessionStarted(s) || s.date < todayIso()) {
+        currentStreak = 0;
+      } else {
+        break;
+      }
+    }
 
     sessions.forEach(s => {
       if (isSessionComplete(s)) completedWorkouts++;
@@ -1724,7 +1850,48 @@
           if (g <= 0 || r >= g) totalGoalsMetSets++;
 
           if (cat === 'cardio') {
-            cardioMinutes += r;
+            const modName = st.moveName || ex.name;
+            const cfg = getCardioConfig(modName);
+            const dist = Number(st.weight || 0);
+            const rate = r > 0 ? +(dist / r).toFixed(2) : 0;
+
+            cardioSet.add(modName);
+            if (!cardioStats[modName]) {
+              cardioStats[modName] = {
+                cfg: cfg,
+                totalMins: 0,
+                totalDist: 0,
+                sessionsCount: 0,
+                bestRate: 0,
+                bestRateDisplay: '',
+                latestRateDisplay: ''
+              };
+            }
+            if (!historyMap[`cardio_${modName}`]) historyMap[`cardio_${modName}`] = [];
+
+            cardioStats[modName].totalMins += r;
+            cardioStats[modName].totalDist = +(cardioStats[modName].totalDist + dist).toFixed(2);
+            cardioStats[modName].sessionsCount++;
+
+            const rateDisp = formatPaceOrRate(r, dist, cfg);
+            if (dist > 0) {
+              cardioStats[modName].latestRateDisplay = rateDisp;
+              if (rate >= cardioStats[modName].bestRate) {
+                cardioStats[modName].bestRate = rate;
+                cardioStats[modName].bestRateDisplay = rateDisp;
+              }
+            }
+
+            const distDisp = cfg.decimals > 0 ? dist.toFixed(cfg.decimals) : Math.round(dist);
+            historyMap[`cardio_${modName}`].push({
+              date: s.date,
+              weight: dist,
+              reps: r,
+              metric: dist > 0 ? rate : r,
+              rateUnit: dist > 0 ? (cfg.rateType === 'pace' ? 'mph' : cfg.rateUnit) : 'min',
+              displayMetric: dist > 0 ? rateDisp : `${r} min`,
+              pillText: dist > 0 ? `${r}m • ${distDisp} ${cfg.unit}` : `${r} min`
+            });
           } else if (cat === 'main') {
             if (st.weight > 0) totalTonnage += st.weight * r;
             if (mainBestMap[ex.name] && st.weight > 0 && r > 0) {
@@ -1846,10 +2013,10 @@
         </div>
         <div class="kpi-box">
           <div>
-            <div class="kpi-lbl">Cardio Logged</div>
-            <div class="kpi-val" style="color:var(--green);margin-top:2px;">${cardioMinutes} min</div>
+            <div class="kpi-lbl">Active Streak</div>
+            <div class="kpi-val" style="color:var(--green);margin-top:2px;">${currentStreak} ${currentStreak === 1 ? 'day' : 'days'}</div>
           </div>
-          <span style="font-size:16px;">⏱</span>
+          <span style="font-size:16px;">🔥</span>
         </div>
       </div>
     `;
@@ -1871,7 +2038,7 @@
             ${b.e1rm ? `Peak: ${b.weight} × ${b.reps} (${b.date.slice(5)})` : 'No logged sets'}
           </div>
           ${isExpanded
-            ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, false)}</div>`
+            ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, 'main')}</div>`
             : `<div class="mini-spark-wrap">${buildDualLayerSparklineSvg(pts, '#38bdf8', true)}</div>`
           }
         </div>
@@ -1916,7 +2083,7 @@
               <div class="stat-num" style="color:var(--purple);">${topHeadline}</div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px;">${subLine}</div>
               ${isExpanded
-                ? `<div class="expanded-detail">${st.isCircuit ? buildCircuitExpandedHtml(pts, st.moveStats) : buildDualLayerExpandedSvg(pts, true)}</div>`
+                ? `<div class="expanded-detail">${st.isCircuit ? buildCircuitExpandedHtml(pts, st.moveStats) : buildDualLayerExpandedSvg(pts, 'accessory')}</div>`
                 : `<div class="mini-spark-wrap">${buildDualLayerSparklineSvg(pts, '#a78bfa', false)}</div>`
               }
             </div>
@@ -1925,7 +2092,53 @@
       </div>
     ` : '';
 
-    box.innerHTML = aiCardHtml + kpiHtml + mainCardsHtml + accHtml;
+    // Include default sheet cardio modalities even before first log so cards are always visible
+    sessions.forEach(s => s.exercises.forEach(ex => {
+      if (ex.isCardio) cardioSet.add(ex.name);
+    }));
+    const cardioNames = Array.from(cardioSet);
+    const cardioHtml = cardioNames.length ? `
+      <div class="sec-header">Conditioning & Output (Tap to Expand)</div>
+      <div class="stat-grid">
+        ${cardioNames.map(name => {
+          const st = cardioStats[name];
+          const pts = historyMap[`cardio_${name}`] || [];
+          const cardKey = `cardio_${name}`;
+          const isExpanded = expandedCardName === cardKey;
+          const safeKey = cardKey.replace(/'/g, "\\'");
+
+          let topHeadline = '—';
+          let subLine = 'No sessions logged';
+          if (st && st.sessionsCount > 0) {
+            if (st.totalDist > 0) {
+              const distDisp = st.cfg.decimals > 0 ? st.totalDist.toFixed(st.cfg.decimals) : Math.round(st.totalDist);
+              topHeadline = st.bestRateDisplay || `${st.totalMins} min`;
+              subLine = `${distDisp} ${st.cfg.unit} • ${st.totalMins} min`;
+            } else {
+              topHeadline = `${st.totalMins} min`;
+              subLine = `${st.sessionsCount} session${st.sessionsCount === 1 ? '' : 's'} logged`;
+            }
+          }
+
+          return `
+            <div class="stat-box cardio-box ${isExpanded ? 'expanded' : ''}" onclick="toggleExpandCard('${safeKey}')">
+              <div class="stat-top-row">
+                <div class="stat-lbl">${name}</div>
+                <span class="expand-hint">${isExpanded ? 'Close' : 'Expand'}</span>
+              </div>
+              <div class="stat-num" style="color:var(--green);">${topHeadline}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;">${subLine}</div>
+              ${isExpanded
+                ? `<div class="expanded-detail">${buildDualLayerExpandedSvg(pts, 'cardio')}</div>`
+                : `<div class="mini-spark-wrap">${buildDualLayerSparklineSvg(pts, '#22c55e', false)}</div>`
+              }
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : '';
+
+    box.innerHTML = aiCardHtml + kpiHtml + mainCardsHtml + accHtml + cardioHtml;
   }
 
   function stepCalendarMonth(delta) {
@@ -1965,13 +2178,17 @@
 
       const doneCount = ex.sets.filter(st => st.completed).length;
       const totalCount = ex.sets.length;
+      const firstSet = ex.sets[0] || {};
+      const displayName = cat === 'cardio' ? (firstSet.moveName || ex.name) : ex.name;
 
       let summaryRight = '';
       if (cat === 'cardio') {
         const mins = ex.sets.reduce((acc, st) => acc + (hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 15)), 0);
-        summaryRight = `${mins} min`;
+        const dist = Number(firstSet.weight || 0);
+        const cfg = getCardioConfig(displayName);
+        summaryRight = dist > 0 ? `${mins}m • ${dist} ${cfg.unit}` : `${mins} min`;
       } else if (circuitFlag) {
-        const repsEach = ex.sets[0]?.goal || 30;
+        const repsEach = firstSet.goal || 30;
         summaryRight = `${totalCount} moves × ${repsEach}`;
       } else {
         const topWeight = Math.max(...ex.sets.map(st => st.weight || 0));
@@ -1990,7 +2207,7 @@
       return `
         <div class="preview-ex-row">
           <div class="preview-ex-left">
-            <span class="preview-ex-name">${ex.name}</span>
+            <span class="preview-ex-name">${displayName}</span>
             ${tagHtml}
           </div>
           <div class="preview-ex-right">${summaryRight}</div>
