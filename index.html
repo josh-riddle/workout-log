@@ -802,6 +802,10 @@
     return allZeroWeight && (hasCircuitName || ex.sets.length >= 2);
   }
 
+  function isGenericCardioLabel(name) {
+    return /^cardio$/i.test(String(name || '').trim());
+  }
+
   function getCardioConfig(modalityName) {
     const n = String(modalityName || '').toLowerCase();
     if (/(stair|step|climb)/i.test(n)) {
@@ -830,22 +834,38 @@
   }
 
   function resolveCarryForwardMoves(list) {
-    const lastKnownByExercise = {};
+    const lastKnownCircuitByKey = {};
+    const lastKnownCardioBySplit = {};
+
     list.forEach(s => {
       s.exercises.forEach(ex => {
+        if (ex.isCardio) {
+          const st = ex.sets[0];
+          if (!st) return;
+          const explicit = String(st.moveName || '').trim();
+          if (explicit) {
+            lastKnownCardioBySplit[s.split] = explicit;
+          } else if (lastKnownCardioBySplit[s.split]) {
+            st.moveName = lastKnownCardioBySplit[s.split];
+            st.isInherited = true;
+          }
+          return;
+        }
+
         if (!isBodyweightCircuit(ex)) return;
+        const circuitKey = `${s.split}_${ex.name}`;
         const explicitNotes = ex.sets.map(st => String(st.moveName || '').trim());
         const hasAnyExplicit = explicitNotes.some(Boolean);
 
         if (hasAnyExplicit) {
-          if (!lastKnownByExercise[ex.name]) lastKnownByExercise[ex.name] = [];
+          if (!lastKnownCircuitByKey[circuitKey]) lastKnownCircuitByKey[circuitKey] = [];
           explicitNotes.forEach((n, idx) => {
-            if (n) lastKnownByExercise[ex.name][idx] = n;
+            if (n) lastKnownCircuitByKey[circuitKey][idx] = n;
           });
-        } else if (lastKnownByExercise[ex.name]) {
+        } else if (lastKnownCircuitByKey[circuitKey]) {
           ex.sets.forEach((st, idx) => {
-            if (!st.moveName && lastKnownByExercise[ex.name][idx]) {
-              st.moveName = lastKnownByExercise[ex.name][idx];
+            if (!st.moveName && lastKnownCircuitByKey[circuitKey][idx]) {
+              st.moveName = lastKnownCircuitByKey[circuitKey][idx];
               st.isInherited = true;
             }
           });
@@ -858,7 +878,7 @@
     pickerTarget = { exIdx, setIdx, mode };
     const ex = sessions[currentIdx].exercises[exIdx];
     const st = ex.sets[setIdx];
-    const currentMove = String(st.moveName || (mode === 'cardio' ? ex.name : '')).trim();
+    const currentMove = String(st.moveName || (mode === 'cardio' && !isGenericCardioLabel(ex.name) ? ex.name : '')).trim();
 
     document.getElementById('movePickerTitle').textContent = mode === 'cardio'
       ? 'Select Conditioning Modality'
@@ -869,17 +889,7 @@
       : 'e.g., Landmine Anti-Rot.';
 
     const pool = new Set(mode === 'cardio' ? cardioOptions : circuitOptions);
-    if (mode === 'cardio') {
-      pool.add(ex.name);
-      sessions.forEach(s => s.exercises.forEach(e => {
-        if (e.isCardio) {
-          pool.add(e.name);
-          e.sets.forEach(setItem => {
-            if (setItem.moveName) pool.add(String(setItem.moveName).trim());
-          });
-        }
-      }));
-    } else {
+    if (mode !== 'cardio') {
       sessions.forEach(s => s.exercises.forEach(e => {
         if (e.name === ex.name) {
           e.sets.forEach(setItem => {
@@ -1804,18 +1814,13 @@
 
   function renderProgress() {
     const box = document.getElementById('progressContainer');
-    const mainLifts = ['Back Squat', 'Flat Bench', 'Barbell Row', 'Incline Bench', 'Deadlift'];
+    const mainLiftSet = new Set();
     const mainBestMap = {};
     const historyMap = {};
     const accessorySet = new Set();
     const accessoryStats = {};
     const cardioSet = new Set();
     const cardioStats = {};
-
-    mainLifts.forEach(l => {
-      mainBestMap[l] = { weight: 0, reps: 0, e1rm: 0, date: '' };
-      historyMap[l] = [];
-    });
 
     let completedWorkouts = 0;
     let totalCompletedSets = 0;
@@ -1846,7 +1851,13 @@
 
         const circuitFlag = isBodyweightCircuit(ex);
 
-        if (cat === 'accessory') {
+        if (cat === 'main') {
+          mainLiftSet.add(ex.name);
+          if (!mainBestMap[ex.name]) {
+            mainBestMap[ex.name] = { weight: 0, reps: 0, e1rm: 0, date: '' };
+          }
+          if (!historyMap[ex.name]) historyMap[ex.name] = [];
+        } else if (cat === 'accessory') {
           accessorySet.add(ex.name);
           if (!accessoryStats[ex.name]) {
             accessoryStats[ex.name] = {
@@ -1880,6 +1891,8 @@
 
           if (cat === 'cardio') {
             const modName = st.moveName || ex.name;
+            if (isGenericCardioLabel(modName)) return;
+
             const cfg = getCardioConfig(modName);
             const dist = Number(st.weight || 0);
             const rate = r > 0 ? +(dist / r).toFixed(2) : 0;
@@ -2050,7 +2063,8 @@
       </div>
     `;
 
-    const mainCardsHtml = `<div class="sec-header">Main Compounds (Weekly Peak e1RM)</div><div class="stat-grid">` + mainLifts.map(name => {
+    const mainLifts = Array.from(mainLiftSet);
+    const mainCardsHtml = mainLifts.length ? `<div class="sec-header">Main Compounds (Weekly Peak e1RM)</div><div class="stat-grid">` + mainLifts.map(name => {
       const b = mainBestMap[name];
       const pts = historyMap[name] || [];
       const isExpanded = expandedCardName === name;
@@ -2072,7 +2086,7 @@
           }
         </div>
       `;
-    }).join('') + `</div>`;
+    }).join('') + `</div>` : '';
 
     const accessoryNames = Array.from(accessorySet);
     const accHtml = accessoryNames.length ? `
@@ -2121,8 +2135,9 @@
       </div>
     ` : '';
 
+    // Include non-generic sheet cardio headers even before first log, but skip generic "Cardio"
     sessions.forEach(s => s.exercises.forEach(ex => {
-      if (ex.isCardio) cardioSet.add(ex.name);
+      if (ex.isCardio && !isGenericCardioLabel(ex.name)) cardioSet.add(ex.name);
     }));
     const cardioNames = Array.from(cardioSet);
     const cardioHtml = cardioNames.length ? `
@@ -2347,3 +2362,4 @@
 </script>
 </body>
 </html>
+
