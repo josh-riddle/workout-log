@@ -728,6 +728,7 @@
   let sessions = [];
   let circuitOptions = [];
   let cardioOptions = [];
+  let cardioUnits = {};
   let isOffline = false;
   let aiInsights = null;
   let refreshingInsights = false;
@@ -806,18 +807,43 @@
     return /^cardio$/i.test(String(name || '').trim());
   }
 
-  function getCardioConfig(modalityName) {
-    const n = String(modalityName || '').toLowerCase();
-    if (/(stair|step|climb)/i.test(n)) {
+  function buildCardioConfigFromUnit(unitRaw) {
+    const u = String(unitRaw || '').trim().toLowerCase();
+    if (/^floor/.test(u)) {
       return { unit: 'floors', step: 1, decimals: 0, rateUnit: 'flr/min', rateType: 'rate' };
     }
-    if (/(assault|air|bike|cycle|erg|ski)/i.test(n)) {
+    if (/^cal/.test(u)) {
       return { unit: 'cal', step: 5, decimals: 0, rateUnit: 'cal/min', rateType: 'rate' };
     }
-    if (/(run|jog|sprint|treadmill|walk|row)/i.test(n)) {
+    if (/^mi/.test(u)) {
       return { unit: 'mi', step: 0.1, decimals: 1, rateUnit: '/mi', rateType: 'pace' };
     }
+    if (/^(m|meter|yd|yard)/.test(u)) {
+      const shortU = /^yd|^yard/.test(u) ? 'yd' : 'm';
+      return { unit: shortU, step: 50, decimals: 0, rateUnit: `${shortU}/min`, rateType: 'rate' };
+    }
+    if (u && u !== 'distance' && u !== 'dist') {
+      return { unit: u, step: 1, decimals: 0, rateUnit: `${u}/min`, rateType: 'rate' };
+    }
     return { unit: 'dist', step: 0.1, decimals: 1, rateUnit: '/min', rateType: 'rate' };
+  }
+
+  function getCardioConfig(modalityName) {
+    const clean = String(modalityName || '').trim();
+    const key = clean.toLowerCase();
+    if (cardioUnits && cardioUnits[key]) {
+      return buildCardioConfigFromUnit(cardioUnits[key]);
+    }
+    if (/(stair|step|climb)/i.test(key)) {
+      return buildCardioConfigFromUnit('Floors');
+    }
+    if (/(assault|air|bike|cycle|erg|ski)/i.test(key)) {
+      return buildCardioConfigFromUnit('Calories');
+    }
+    if (/(run|jog|sprint|treadmill|walk|row)/i.test(key)) {
+      return buildCardioConfigFromUnit('Miles');
+    }
+    return buildCardioConfigFromUnit('Distance');
   }
 
   function formatPaceOrRate(mins, dist, cfg) {
@@ -911,9 +937,12 @@
       listEl.innerHTML = optionsList.map(opt => {
         const isSelected = opt.toLowerCase() === currentMove.toLowerCase();
         const safeOpt = opt.replace(/'/g, "\\'");
+        const unitBadge = (mode === 'cardio' && cardioUnits[opt.toLowerCase()])
+          ? `<span style="font-size:11px;color:var(--muted);margin-left:6px;">(${cardioUnits[opt.toLowerCase()]})</span>`
+          : '';
         return `
           <button class="option-item ${isSelected ? selectedCls : ''}" onclick="selectCircuitMove('${safeOpt}')">
-            <span>${opt}</span>
+            <span>${opt}${unitBadge}</span>
             ${isSelected ? `<span style="color:${checkColor};font-size:12px;">Selected ✓</span>` : ''}
           </button>
         `;
@@ -1095,6 +1124,9 @@
       const cachedCardio = localStorage.getItem('gymlog_cardio_opts');
       if (cachedCardio) cardioOptions = JSON.parse(cachedCardio);
 
+      const cachedUnits = localStorage.getItem('gymlog_cardio_units');
+      if (cachedUnits) cardioUnits = JSON.parse(cachedUnits);
+
       const cached = localStorage.getItem('gymlog_cache');
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -1142,6 +1174,10 @@
         if (Array.isArray(res.cardioOptions)) {
           cardioOptions = res.cardioOptions;
           localStorage.setItem('gymlog_cardio_opts', JSON.stringify(cardioOptions));
+        }
+        if (res.cardioUnits && typeof res.cardioUnits === 'object') {
+          cardioUnits = res.cardioUnits;
+          localStorage.setItem('gymlog_cardio_units', JSON.stringify(cardioUnits));
         }
         if (res.aiInsights) {
           aiInsights = res.aiInsights;
@@ -1312,6 +1348,10 @@
         if (Array.isArray(res.cardioOptions)) {
           cardioOptions = res.cardioOptions;
           localStorage.setItem('gymlog_cardio_opts', JSON.stringify(cardioOptions));
+        }
+        if (res.cardioUnits && typeof res.cardioUnits === 'object') {
+          cardioUnits = res.cardioUnits;
+          localStorage.setItem('gymlog_cardio_units', JSON.stringify(cardioUnits));
         }
         const activeId = session.id;
         sessions = res.sessions;
