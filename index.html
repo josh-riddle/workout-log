@@ -63,6 +63,7 @@
   .sync-pill.live { color: var(--green); border-color: rgba(34,197,94,0.4); background: var(--green-dim); }
   .sync-pill.syncing { color: var(--amber); border-color: rgba(245,158,11,0.4); }
   .sync-pill.dirty { color: var(--accent); border-color: rgba(56,189,248,0.45); background: var(--accent-dim); }
+  .sync-pill.queued { color: var(--amber); border-color: rgba(245,158,11,0.45); background: var(--amber-dim); }
 
   /* Day Navigator */
   .day-nav {
@@ -460,7 +461,7 @@
     border-radius: 14px; padding: 10px 12px;
     display: flex; justify-content: space-between; align-items: center;
   }
-  .kpi-val { font-size: 17px; font-weight: 900; color: var(--text); }
+  .kpi-val { font-size: 16px; font-weight: 900; color: var(--text); }
   .kpi-lbl { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; }
 
   .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
@@ -635,7 +636,7 @@
     <div class="top-bar">
       <div class="brand-row">
         <div class="brand-title">Gym Log</div>
-        <button id="syncPill" class="sync-pill" onclick="refreshFromSheet(false, true)">Connecting...</button>
+        <button id="syncPill" class="sync-pill" onclick="handleSyncPillClick()">Connecting...</button>
       </div>
       <div class="day-nav">
         <button id="prevBtn" class="nav-arrow" onclick="stepDay(-1)">&#8249;</button>
@@ -662,7 +663,7 @@
   <div id="view-progress" style="display:none; padding-top:14px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div style="font-size:18px;font-weight:800;">Progress &amp; Insights</div>
-      <button class="sync-pill live" onclick="refreshFromSheet(false, true)">Refresh Data</button>
+      <button class="sync-pill live" onclick="handleSyncPillClick()">Refresh Data</button>
     </div>
     <div id="progressContainer"></div>
   </div>
@@ -671,7 +672,7 @@
   <div id="view-calendar" style="display:none; padding-top:14px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div style="font-size:18px;font-weight:800;">Workout Schedule</div>
-      <button class="sync-pill live" onclick="refreshFromSheet(false, true)">Sync Sheet</button>
+      <button class="sync-pill live" onclick="handleSyncPillClick()">Sync Sheet</button>
     </div>
     <div id="calendarContainer"></div>
   </div>
@@ -724,12 +725,14 @@
 
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxkhC54IxDTNkaspBOUuhvuQ0nEBMlWj5rcm66Aza-12UyCq9LJbYeGTGWqwTJlMsjb7A/exec";
+  const SYNC_QUEUE_KEY = 'gymlog_sync_queue';
 
   let sessions = [];
   let circuitOptions = [];
   let cardioOptions = [];
   let cardioUnits = {};
   let isOffline = false;
+  let isFlushingQueue = false;
   let aiInsights = null;
   let refreshingInsights = false;
   let currentIdx = 0;
@@ -900,6 +903,118 @@
     });
   }
 
+  // --- OFFLINE SYNC QUEUE HELPERS ---
+  function readSyncQueue() {
+    try {
+      const raw = localStorage.getItem(SYNC_QUEUE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function writeSyncQueue(queue) {
+    try {
+      localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+    } catch (e) {}
+  }
+
+  function enqueueSessionPayload(sessionObj) {
+    const queue = readSyncQueue();
+    const clone = JSON.parse(JSON.stringify(sessionObj));
+    const existingIdx = queue.findIndex(item => item.id === clone.id);
+    if (existingIdx !== -1) {
+      queue[existingIdx] = clone;
+    } else {
+      queue.push(clone);
+    }
+    writeSyncQueue(queue);
+  }
+
+  function applyQueuedOverlay(baseSessions) {
+    const queue = readSyncQueue();
+    if (!queue.length) return baseSessions;
+    const mapById = {};
+    queue.forEach(q => { mapById[q.id] = q; });
+    return baseSessions.map(s => mapById[s.id] ? mapById[s.id] : s);
+  }
+
+  async function flushSyncQueue() {
+    if (isFlushingQueue) return;
+    const queue = readSyncQueue();
+    if (!queue.length || !SCRIPT_URL || SCRIPT_URL.includes("PASTE_YOUR")) return;
+
+    isFlushingQueue = true;
+    setSyncStatus(`Syncing (${queue.length})...`, 'syncing');
+
+    try {
+      let latestServerRes = null;
+      while (readSyncQueue().length > 0) {
+        const currentQueue = readSyncQueue();
+        const item = currentQueue[0];
+        const resp = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(item)
+        });
+        const res = await resp.json();
+        if (!res || res.ok === false) {
+          throw new Error((res && res.error) || 'Queue flush failed');
+        }
+        latestServerRes = res;
+        currentQueue.shift();
+        writeSyncQueue(currentQueue);
+      }
+
+      isOffline = false;
+      if (latestServerRes && latestServerRes.sessions && getModifiedSetCount() === 0) {
+        if (Array.isArray(latestServerRes.circuitOptions)) {
+          circuitOptions = latestServerRes.circuitOptions;
+          localStorage.setItem('gymlog_circuit_opts', JSON.stringify(circuitOptions));
+        }
+        if (Array.isArray(latestServerRes.cardioOptions)) {
+          cardioOptions = latestServerRes.cardioOptions;
+          localStorage.setItem('gymlog_cardio_opts', JSON.stringify(cardioOptions));
+        }
+        if (latestServerRes.cardioUnits && typeof latestServerRes.cardioUnits === 'object') {
+          cardioUnits = latestServerRes.cardioUnits;
+          localStorage.setItem('gymlog_cardio_units', JSON.stringify(cardioUnits));
+        }
+        const activeId = sessions[currentIdx] ? sessions[currentIdx].id : null;
+        sessions = latestServerRes.sessions;
+        resolveCarryForwardMoves(sessions);
+        localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
+        targetIdx = findAutoTargetIndex(sessions);
+        if (userNavigated && activeId) {
+          const foundIdx = sessions.findIndex(s => s.id === activeId);
+          currentIdx = foundIdx !== -1 ? foundIdx : targetIdx;
+        } else {
+          currentIdx = targetIdx;
+        }
+        captureSavedSnapshot();
+        render();
+        if (activeTab === 'progress') renderProgress();
+        if (activeTab === 'calendar') renderCalendar();
+      } else {
+        syncDirtyState();
+      }
+    } catch (err) {
+      isOffline = true;
+      syncDirtyState();
+    } finally {
+      isFlushingQueue = false;
+    }
+  }
+
+  async function handleSyncPillClick() {
+    if (readSyncQueue().length > 0) {
+      await flushSyncQueue();
+    }
+    await refreshFromSheet(false, true);
+  }
+
   function openMovePicker(exIdx, setIdx, mode = 'circuit') {
     pickerTarget = { exIdx, setIdx, mode };
     const ex = sessions[currentIdx].exercises[exIdx];
@@ -1020,10 +1135,6 @@
     });
   }
 
-  function formatShortTon(lbs) {
-    return lbs >= 1000 ? `${(lbs / 1000).toFixed(1)}k lb` : `${Math.round(lbs)} lb`;
-  }
-
   function setSyncStatus(text, cls) {
     const pill = document.getElementById('syncPill');
     pill.textContent = text;
@@ -1082,6 +1193,7 @@
 
   function syncDirtyState() {
     const diffs = getModifiedSetCount();
+    const queuedCount = readSyncQueue().length;
     const fab = document.getElementById('saveFab');
     const lbl = document.getElementById('saveFabLabel');
     const restActive = document.getElementById('restBar').classList.contains('active');
@@ -1093,6 +1205,8 @@
     if (show) {
       lbl.textContent = diffs === 1 ? 'Save 1 Change' : `Save ${diffs} Changes`;
       setSyncStatus('Unsaved Changes', 'dirty');
+    } else if (queuedCount > 0) {
+      setSyncStatus(`Queued (${queuedCount})`, 'queued');
     } else if (sessions.length > 0) {
       if (isOffline) {
         setSyncStatus('Cached (Offline)', '');
@@ -1131,7 +1245,7 @@
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          sessions = parsed;
+          sessions = applyQueuedOverlay(parsed);
           resolveCarryForwardMoves(sessions);
           targetIdx = findAutoTargetIndex(sessions);
           currentIdx = targetIdx;
@@ -1155,7 +1269,10 @@
       setSyncStatus('Missing URL', '');
       return;
     }
-    if (getModifiedSetCount() === 0) {
+    if (readSyncQueue().length > 0) {
+      await flushSyncQueue();
+    }
+    if (getModifiedSetCount() === 0 && readSyncQueue().length === 0) {
       setSyncStatus('Syncing...', 'syncing');
     }
 
@@ -1184,14 +1301,16 @@
           localStorage.setItem('gymlog_ai_cache', JSON.stringify(aiInsights));
         }
 
+        const mergedSessions = applyQueuedOverlay(res.sessions);
+
         if (getModifiedSetCount() > 0 && sessions[currentIdx]) {
-          localStorage.setItem('gymlog_cache', JSON.stringify(res.sessions));
+          localStorage.setItem('gymlog_cache', JSON.stringify(mergedSessions));
           syncDirtyState();
           return;
         }
 
         const activeId = sessions[currentIdx] ? sessions[currentIdx].id : null;
-        sessions = res.sessions;
+        sessions = mergedSessions;
         resolveCarryForwardMoves(sessions);
         localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
         targetIdx = findAutoTargetIndex(sessions);
@@ -1325,51 +1444,11 @@
 
   async function saveCurrentSession() {
     const session = sessions[currentIdx];
-    const fab = document.getElementById('saveFab');
-    const lbl = document.getElementById('saveFabLabel');
-    fab.disabled = true;
-    lbl.textContent = 'Saving...';
-    setSyncStatus('Saving...', 'syncing');
-
-    try {
-      const resp = await fetch(SCRIPT_URL, {
-        method: 'POST',
-        redirect: 'follow',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(session)
-      });
-      const res = await resp.json();
-      if (res && res.sessions) {
-        isOffline = false;
-        if (Array.isArray(res.circuitOptions)) {
-          circuitOptions = res.circuitOptions;
-          localStorage.setItem('gymlog_circuit_opts', JSON.stringify(circuitOptions));
-        }
-        if (Array.isArray(res.cardioOptions)) {
-          cardioOptions = res.cardioOptions;
-          localStorage.setItem('gymlog_cardio_opts', JSON.stringify(cardioOptions));
-        }
-        if (res.cardioUnits && typeof res.cardioUnits === 'object') {
-          cardioUnits = res.cardioUnits;
-          localStorage.setItem('gymlog_cardio_units', JSON.stringify(cardioUnits));
-        }
-        const activeId = session.id;
-        sessions = res.sessions;
-        resolveCarryForwardMoves(sessions);
-        localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
-        targetIdx = findAutoTargetIndex(sessions);
-        const foundIdx = sessions.findIndex(s => s.id === activeId);
-        currentIdx = foundIdx !== -1 ? foundIdx : targetIdx;
-      }
-      fab.disabled = false;
-      captureSavedSnapshot();
-      render();
-    } catch (err) {
-      fab.disabled = false;
-      syncDirtyState();
-      setSyncStatus('Save Failed', '');
-      alert('Save failed: ' + err.message);
-    }
+    enqueueSessionPayload(session);
+    localStorage.setItem('gymlog_cache', JSON.stringify(sessions));
+    captureSavedSnapshot();
+    render();
+    await flushSyncQueue();
   }
 
   function startRest(sec) {
@@ -1862,32 +1941,45 @@
     const cardioSet = new Set();
     const cardioStats = {};
 
-    let completedWorkouts = 0;
-    let totalCompletedSets = 0;
-    let totalGoalsMetSets = 0;
-    let totalTonnage = 0;
-    const activeWeeks = new Set();
+    const today = todayIso();
+    const activeTabName = sessions[targetIdx] ? sessions[targetIdx].tab : '';
+    const activeWeekKey = getMondayWeekKey(sessions[targetIdx] ? sessions[targetIdx].date : today);
 
-    let currentStreak = 0;
-    for (let i = 0; i < sessions.length; i++) {
-      const s = sessions[i];
-      if (isSessionComplete(s)) {
-        currentStreak++;
-      } else if (isSessionStarted(s) || s.date < todayIso()) {
-        currentStreak = 0;
-      } else {
-        break;
-      }
-    }
+    let monthTotal = 0;
+    let monthDone = 0;
+    let weekCardioLogged = 0;
+    let weekCardioGoal = 0;
+
+    // Group sessions by Monday week key for x wk (y/3) streak calculation
+    const weekGroups = {};
 
     sessions.forEach(s => {
-      if (isSessionComplete(s)) completedWorkouts++;
+      const complete = isSessionComplete(s);
+      if (activeTabName && s.tab === activeTabName) {
+        monthTotal++;
+        if (complete) monthDone++;
+      }
+
+      const wk = getMondayWeekKey(s.date);
+      if (!weekGroups[wk]) weekGroups[wk] = { total: 0, done: 0, startedOrPast: false };
+      weekGroups[wk].total++;
+      if (complete) weekGroups[wk].done++;
+      if (isSessionStarted(s) || s.date < today) weekGroups[wk].startedOrPast = true;
+
       let liftRank = 0;
-      let sessionHasCompletedWork = false;
 
       s.exercises.forEach(ex => {
         const cat = getExerciseCategory(ex, liftRank);
         if (!ex.isCardio) liftRank++;
+
+        if (cat === 'cardio' && wk === activeWeekKey) {
+          ex.sets.forEach(st => {
+            weekCardioGoal += Number(st.goal || 15);
+            if (st.completed) {
+              weekCardioLogged += hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 0);
+            }
+          });
+        }
 
         const circuitFlag = isBodyweightCircuit(ex);
 
@@ -1922,12 +2014,8 @@
 
         ex.sets.forEach((st, setIdx) => {
           if (!st.completed) return;
-          sessionHasCompletedWork = true;
           const r = hasValue(st.loggedReps) ? Number(st.loggedReps) : Number(st.goal || 0);
           const g = Number(st.goal || 0);
-
-          totalCompletedSets++;
-          if (g <= 0 || r >= g) totalGoalsMetSets++;
 
           if (cat === 'cardio') {
             const modName = st.moveName || ex.name;
@@ -1975,7 +2063,6 @@
               pillText: dist > 0 ? `${r}m • ${distDisp} ${cfg.unit}` : `${r} min`
             });
           } else if (cat === 'main') {
-            if (st.weight > 0) totalTonnage += st.weight * r;
             if (mainBestMap[ex.name] && st.weight > 0 && r > 0) {
               const est = Math.round(st.weight * (1 + r / 30));
               if (est > mainBestMap[ex.name].e1rm) {
@@ -1986,7 +2073,6 @@
               }
             }
           } else if (cat === 'accessory') {
-            if (st.weight > 0) totalTonnage += st.weight * r;
             accessoryStats[ex.name].totalReps += r;
             accessoryStats[ex.name].totalGoalReps += (g > 0 ? g : r);
             sessionCircuitReps += r;
@@ -2039,14 +2125,45 @@
           }
         }
       });
-
-      if (sessionHasCompletedWork) {
-        activeWeeks.add(getMondayWeekKey(s.date));
-      }
     });
 
-    const goalHitPct = totalCompletedSets > 0 ? Math.round((totalGoalsMetSets / totalCompletedSets) * 100) : 0;
-    const weeklyAvgTonnage = activeWeeks.size > 0 ? (totalTonnage / activeWeeks.size) : 0;
+    // Compute x wk (y/3) streak across chronological Monday weeks
+    const sortedWeekKeys = Object.keys(weekGroups).sort();
+    let completedWeeksStreak = 0;
+    for (const wk of sortedWeekKeys) {
+      const wg = weekGroups[wk];
+      if (wg.total > 0 && wg.done === wg.total) {
+        completedWeeksStreak++;
+      } else if (wk < activeWeekKey && wg.startedOrPast) {
+        completedWeeksStreak = 0;
+      } else {
+        break;
+      }
+    }
+    const activeWg = weekGroups[activeWeekKey] || { done: 0, total: 3 };
+    const wkLabel = completedWeeksStreak === 1 ? '1 wk' : `${completedWeeksStreak} wks`;
+    const streakDisplay = `${wkLabel} (${activeWg.done}/${activeWg.total || 3})`;
+
+    // Compute average e1RM gain across main lifts (latest weekly peak vs first weekly peak)
+    const mainLifts = Array.from(mainLiftSet);
+    const liftDeltas = [];
+    mainLifts.forEach(name => {
+      const peaks = computeWeeklyPeaks(historyMap[name] || []);
+      if (peaks.length >= 2) {
+        liftDeltas.push(peaks[peaks.length - 1].metric - peaks[0].metric);
+      }
+    });
+    let e1rmGainDisplay = 'Baseline';
+    let e1rmGainColor = 'var(--accent)';
+    if (liftDeltas.length > 0) {
+      const avgGain = Math.round(liftDeltas.reduce((a, b) => a + b, 0) / liftDeltas.length);
+      e1rmGainDisplay = avgGain >= 0 ? `+${avgGain} lb` : `${avgGain} lb`;
+      e1rmGainColor = avgGain >= 0 ? 'var(--green)' : 'var(--amber)';
+    }
+
+    const weeklyCardioDisplay = weekCardioGoal > 0
+      ? `${weekCardioLogged} / ${weekCardioGoal}m`
+      : `${weekCardioLogged}m`;
 
     const bullets = (aiInsights && Array.isArray(aiInsights.bullets) && aiInsights.bullets.length)
       ? aiInsights.bullets
@@ -2075,35 +2192,35 @@
       <div class="kpi-row">
         <div class="kpi-box">
           <div>
-            <div class="kpi-lbl">Workouts Done</div>
-            <div class="kpi-val" style="color:var(--green);margin-top:2px;">${completedWorkouts}</div>
+            <div class="kpi-lbl">This Month${activeTabName ? ' (' + activeTabName + ')' : ''}</div>
+            <div class="kpi-val" style="color:var(--green);margin-top:2px;">${monthTotal ? `${monthDone} / ${monthTotal}` : '—'}</div>
           </div>
-          <span style="font-size:18px;">&#10003;</span>
+          <span style="font-size:17px;">&#10003;</span>
         </div>
         <div class="kpi-box">
           <div>
-            <div class="kpi-lbl">Goal Hit Rate</div>
-            <div class="kpi-val" style="color:var(--accent);margin-top:2px;">${totalCompletedSets ? goalHitPct + '%' : '—'}</div>
+            <div class="kpi-lbl">e1RM Gain</div>
+            <div class="kpi-val" style="color:${e1rmGainColor};margin-top:2px;">${e1rmGainDisplay}</div>
           </div>
-          <span style="font-size:15px;">&#127919;</span>
+          <span style="font-size:15px;">&#128200;</span>
         </div>
         <div class="kpi-box">
           <div>
-            <div class="kpi-lbl">Weekly Avg Vol</div>
-            <div class="kpi-val" style="color:var(--purple);margin-top:2px;">${activeWeeks.size ? formatShortTon(weeklyAvgTonnage) : '—'}</div>
+            <div class="kpi-lbl">Weekly Cardio</div>
+            <div class="kpi-val" style="color:var(--purple);margin-top:2px;">${weeklyCardioDisplay}</div>
           </div>
+          <span style="font-size:15px;">&#9201;</span>
         </div>
         <div class="kpi-box">
           <div>
             <div class="kpi-lbl">Active Streak</div>
-            <div class="kpi-val" style="color:var(--green);margin-top:2px;">${currentStreak} ${currentStreak === 1 ? 'day' : 'days'}</div>
+            <div class="kpi-val" style="color:var(--green);margin-top:2px;">${streakDisplay}</div>
           </div>
           <span style="font-size:16px;">&#128293;</span>
         </div>
       </div>
     `;
 
-    const mainLifts = Array.from(mainLiftSet);
     const mainCardsHtml = mainLifts.length ? `<div class="sec-header">Main Compounds (Weekly Peak e1RM)</div><div class="stat-grid">` + mainLifts.map(name => {
       const b = mainBestMap[name];
       const pts = historyMap[name] || [];
@@ -2175,7 +2292,6 @@
       </div>
     ` : '';
 
-    // Include non-generic sheet cardio headers even before first log, but skip generic "Cardio"
     sessions.forEach(s => s.exercises.forEach(ex => {
       if (ex.isCardio && !isGenericCardioLabel(ex.name)) cardioSet.add(ex.name);
     }));
@@ -2391,6 +2507,10 @@
     `;
   }
 
+  window.addEventListener('online', () => {
+    flushSyncQueue();
+  });
+
   window.addEventListener('DOMContentLoaded', () => {
     hydrateFromLocalCache();
     refreshFromSheet(false, false);
@@ -2402,4 +2522,3 @@
 </script>
 </body>
 </html>
-
