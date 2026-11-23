@@ -728,6 +728,7 @@
   const SYNC_QUEUE_KEY = 'gymlog_sync_queue';
 
   let sessions = [];
+  let archiveSummary = [];
   let circuitOptions = [];
   let cardioOptions = [];
   let cardioUnits = {};
@@ -970,6 +971,10 @@
 
       isOffline = false;
       if (latestServerRes && latestServerRes.sessions && getModifiedSetCount() === 0) {
+        if (Array.isArray(latestServerRes.archiveSummary)) {
+          archiveSummary = latestServerRes.archiveSummary;
+          localStorage.setItem('gymlog_archive_cache', JSON.stringify(archiveSummary));
+        }
         if (Array.isArray(latestServerRes.circuitOptions)) {
           circuitOptions = latestServerRes.circuitOptions;
           localStorage.setItem('gymlog_circuit_opts', JSON.stringify(circuitOptions));
@@ -1232,6 +1237,9 @@
       const cachedAi = localStorage.getItem('gymlog_ai_cache');
       if (cachedAi) aiInsights = JSON.parse(cachedAi);
 
+      const cachedArchive = localStorage.getItem('gymlog_archive_cache');
+      if (cachedArchive) archiveSummary = JSON.parse(cachedArchive);
+
       const cachedOpts = localStorage.getItem('gymlog_circuit_opts');
       if (cachedOpts) circuitOptions = JSON.parse(cachedOpts);
 
@@ -1284,6 +1292,10 @@
 
       if (res && res.sessions) {
         isOffline = false;
+        if (Array.isArray(res.archiveSummary)) {
+          archiveSummary = res.archiveSummary;
+          localStorage.setItem('gymlog_archive_cache', JSON.stringify(archiveSummary));
+        }
         if (Array.isArray(res.circuitOptions)) {
           circuitOptions = res.circuitOptions;
           localStorage.setItem('gymlog_circuit_opts', JSON.stringify(circuitOptions));
@@ -1944,15 +1956,158 @@
     const today = todayIso();
     const activeTabName = sessions[targetIdx] ? sessions[targetIdx].tab : '';
     const activeWeekKey = getMondayWeekKey(sessions[targetIdx] ? sessions[targetIdx].date : today);
+    const activeTabsSet = new Set(sessions.map(s => s.tab));
 
     let monthTotal = 0;
     let monthDone = 0;
     let weekCardioLogged = 0;
     let weekCardioGoal = 0;
-
-    // Group sessions by Monday week key for x wk (y/3) streak calculation
     const weekGroups = {};
 
+    // 1. Hydrate historical points & weekly completion from hidden Archive rollup first
+    archiveSummary.forEach(item => {
+      if (activeTabsSet.has(item.tab)) return; // Avoid double-counting if tab is still in active window
+
+      if (item.category === 'meta') {
+        const wk = getMondayWeekKey(item.date);
+        if (!weekGroups[wk]) weekGroups[wk] = { total: 0, done: 0, startedOrPast: false };
+        weekGroups[wk].total++;
+        if (item.completed) weekGroups[wk].done++;
+        if (item.date < today) weekGroups[wk].startedOrPast = true;
+        return;
+      }
+
+      if (item.category === 'main') {
+        mainLiftSet.add(item.exercise);
+        if (!mainBestMap[item.exercise]) {
+          mainBestMap[item.exercise] = { weight: 0, reps: 0, e1rm: 0, date: '' };
+        }
+        if (!historyMap[item.exercise]) historyMap[item.exercise] = [];
+
+        if (item.e1rm > mainBestMap[item.exercise].e1rm) {
+          mainBestMap[item.exercise] = {
+            weight: item.topWeight,
+            reps: item.reps,
+            e1rm: item.e1rm,
+            date: item.date
+          };
+        }
+        if (item.e1rm > 0) {
+          historyMap[item.exercise].push({
+            date: item.date,
+            weight: item.topWeight,
+            reps: item.reps,
+            metric: item.e1rm
+          });
+        }
+      } else if (item.category === 'accessory' || item.category === 'circuit') {
+        const isCircuit = (item.category === 'circuit');
+        accessorySet.add(item.exercise);
+        if (!accessoryStats[item.exercise]) {
+          accessoryStats[item.exercise] = {
+            isCircuit: isCircuit,
+            bestWeight: 0,
+            bestReps: 0,
+            firstWeight: null,
+            latestWeight: 0,
+            totalReps: 0,
+            totalGoalReps: 0,
+            moveStats: {}
+          };
+        }
+        if (!historyMap[item.exercise]) historyMap[item.exercise] = [];
+
+        accessoryStats[item.exercise].totalReps += item.reps;
+        accessoryStats[item.exercise].totalGoalReps += item.reps;
+
+        if (isCircuit) {
+          const parts = item.moveDetail ? item.moveDetail.split('|') : [];
+          const pillParts = [];
+          parts.forEach(p => {
+            const [mName, rStr] = p.split(':');
+            const rNum = Number(rStr) || 0;
+            if (mName) {
+              pillParts.push(`${mName} (${rNum})`);
+              if (!accessoryStats[item.exercise].moveStats[mName]) {
+                accessoryStats[item.exercise].moveStats[mName] = { totalReps: 0, count: 0 };
+              }
+              accessoryStats[item.exercise].moveStats[mName].totalReps += rNum;
+              accessoryStats[item.exercise].moveStats[mName].count += 1;
+            }
+          });
+          historyMap[item.exercise].push({
+            date: item.date,
+            weight: 0,
+            reps: item.reps,
+            metric: 100,
+            pillText: pillParts.join(' • ') || `${item.reps} reps`
+          });
+        } else if (item.topWeight > 0) {
+          if (accessoryStats[item.exercise].firstWeight === null) {
+            accessoryStats[item.exercise].firstWeight = item.topWeight;
+          }
+          accessoryStats[item.exercise].latestWeight = item.topWeight;
+          if (item.topWeight > accessoryStats[item.exercise].bestWeight ||
+             (item.topWeight === accessoryStats[item.exercise].bestWeight && item.reps > accessoryStats[item.exercise].bestReps)) {
+            accessoryStats[item.exercise].bestWeight = item.topWeight;
+            accessoryStats[item.exercise].bestReps = item.reps;
+          }
+          historyMap[item.exercise].push({
+            date: item.date,
+            weight: item.topWeight,
+            reps: item.reps,
+            metric: item.topWeight
+          });
+        }
+      } else if (item.category === 'cardio') {
+        const modName = item.exercise;
+        if (isGenericCardioLabel(modName)) return;
+        const cfg = getCardioConfig(modName);
+        const r = item.cardioMins;
+        const dist = item.cardioOutput;
+        const rate = r > 0 ? +(dist / r).toFixed(2) : 0;
+
+        cardioSet.add(modName);
+        if (!cardioStats[modName]) {
+          cardioStats[modName] = {
+            cfg: cfg,
+            totalMins: 0,
+            totalDist: 0,
+            sessionsCount: 0,
+            bestRate: 0,
+            bestRateDisplay: '',
+            latestRateDisplay: ''
+          };
+        }
+        if (!historyMap[`cardio_${modName}`]) historyMap[`cardio_${modName}`] = [];
+
+        cardioStats[modName].totalMins += r;
+        cardioStats[modName].totalDist = +(cardioStats[modName].totalDist + dist).toFixed(2);
+        cardioStats[modName].sessionsCount++;
+
+        const rateDisp = formatPaceOrRate(r, dist, cfg);
+        if (dist > 0) {
+          cardioStats[modName].latestRateDisplay = rateDisp;
+          if (rate >= cardioStats[modName].bestRate) {
+            cardioStats[modName].bestRate = rate;
+            cardioStats[modName].bestRateDisplay = rateDisp;
+          }
+        }
+
+        const distDisp = cfg.decimals > 0 ? dist.toFixed(cfg.decimals) : Math.round(dist);
+        historyMap[`cardio_${modName}`].push({
+          date: item.date,
+          weight: dist,
+          reps: r,
+          metric: dist > 0 ? rate : r,
+          rateUnit: dist > 0 ? (cfg.rateType === 'pace' ? 'mph' : cfg.rateUnit) : 'min',
+          displayMetric: dist > 0 ? rateDisp : `${r} min`,
+          pillText: dist > 0 ? `${r}m • ${distDisp} ${cfg.unit}` : `${r} min`
+        });
+      }
+    });
+
+    // 2. Append active 4-month window sessions on top
     sessions.forEach(s => {
       const complete = isSessionComplete(s);
       if (activeTabName && s.tab === activeTabName) {
@@ -2127,7 +2282,12 @@
       });
     });
 
-    // Compute x wk (y/3) streak across chronological Monday weeks
+    // Ensure chronological ordering across merged archive + active points
+    Object.keys(historyMap).forEach(k => {
+      historyMap[k].sort((a, b) => a.date.localeCompare(b.date));
+    });
+
+    // Compute x wk (y/3) streak across chronological Monday weeks (Archive + Active)
     const sortedWeekKeys = Object.keys(weekGroups).sort();
     let completedWeeksStreak = 0;
     for (const wk of sortedWeekKeys) {
@@ -2144,7 +2304,7 @@
     const wkLabel = completedWeeksStreak === 1 ? '1 wk' : `${completedWeeksStreak} wks`;
     const streakDisplay = `${wkLabel} (${activeWg.done}/${activeWg.total || 3})`;
 
-    // Compute average e1RM gain across main lifts (latest weekly peak vs first weekly peak)
+    // Compute average e1RM gain across main lifts (latest weekly peak vs all-time starting peak)
     const mainLifts = Array.from(mainLiftSet);
     const liftDeltas = [];
     mainLifts.forEach(name => {
