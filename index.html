@@ -567,7 +567,7 @@
     transform: scale(1.04);
   }
   .cal-dot {
-    font-size: 9px; font-weight: 800; margin-top: 2px; letter-spacing: 0.2px;
+    font-size: 9px; font-weight: 800; margin-top: 2px; letter-spacing: 0.3px;
   }
   .legend-row {
     display: flex; justify-content: space-around; flex-wrap: wrap; gap: 8px;
@@ -732,6 +732,7 @@
   let circuitOptions = [];
   let cardioOptions = [];
   let cardioUnits = {};
+  let splitConfig = {};
   let isOffline = false;
   let isFlushingQueue = false;
   let aiInsights = null;
@@ -770,6 +771,47 @@
   function isoToEpoch(isoDate) {
     const [y, m, d] = isoDate.split('-').map(Number);
     return new Date(y, m - 1, d).getTime();
+  }
+
+  function resolveSplitColor(rawColor) {
+    const c = String(rawColor || '').trim().toLowerCase();
+    if (!c) return '';
+    if (c.startsWith('#')) return c;
+    const palette = {
+      blue: '#38bdf8',
+      cyan: '#38bdf8',
+      sky: '#38bdf8',
+      purple: '#a78bfa',
+      violet: '#a78bfa',
+      amber: '#f59e0b',
+      orange: '#fb923c',
+      yellow: '#facc15',
+      green: '#4ade80',
+      emerald: '#22c55e',
+      red: '#f87171',
+      rose: '#fb7185',
+      pink: '#f472b6',
+      white: '#f1f5f9',
+      slate: '#94a3b8',
+      gray: '#94a3b8'
+    };
+    return palette[c] || c;
+  }
+
+  function getSplitDisplayMeta(splitName) {
+    const clean = String(splitName || '').trim();
+    const cfg = splitConfig ? splitConfig[clean.toLowerCase()] : null;
+    const fallbackTag = clean.replace(/Workout\s*/i, 'W').slice(0, 4).toUpperCase();
+    const calTag = (cfg && cfg.calTag) ? cfg.calTag.toUpperCase() : fallbackTag;
+    const label = (cfg && cfg.label) ? cfg.label : '';
+    const color = (cfg && cfg.color) ? resolveSplitColor(cfg.color) : '';
+    return {
+      anchor: clean,
+      label: label,
+      fullTitle: label ? `${clean} • ${label}` : clean,
+      calTag: calTag,
+      color: color
+    };
   }
 
   function isSessionComplete(s) {
@@ -986,6 +1028,10 @@
         if (latestServerRes.cardioUnits && typeof latestServerRes.cardioUnits === 'object') {
           cardioUnits = latestServerRes.cardioUnits;
           localStorage.setItem('gymlog_cardio_units', JSON.stringify(cardioUnits));
+        }
+        if (latestServerRes.splitConfig && typeof latestServerRes.splitConfig === 'object') {
+          splitConfig = latestServerRes.splitConfig;
+          localStorage.setItem('gymlog_split_cfg', JSON.stringify(splitConfig));
         }
         const activeId = sessions[currentIdx] ? sessions[currentIdx].id : null;
         sessions = latestServerRes.sessions;
@@ -1249,6 +1295,9 @@
       const cachedUnits = localStorage.getItem('gymlog_cardio_units');
       if (cachedUnits) cardioUnits = JSON.parse(cachedUnits);
 
+      const cachedSplitCfg = localStorage.getItem('gymlog_split_cfg');
+      if (cachedSplitCfg) splitConfig = JSON.parse(cachedSplitCfg);
+
       const cached = localStorage.getItem('gymlog_cache');
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -1307,6 +1356,10 @@
         if (res.cardioUnits && typeof res.cardioUnits === 'object') {
           cardioUnits = res.cardioUnits;
           localStorage.setItem('gymlog_cardio_units', JSON.stringify(cardioUnits));
+        }
+        if (res.splitConfig && typeof res.splitConfig === 'object') {
+          splitConfig = res.splitConfig;
+          localStorage.setItem('gymlog_split_cfg', JSON.stringify(splitConfig));
         }
         if (res.aiInsights) {
           aiInsights = res.aiInsights;
@@ -1521,6 +1574,7 @@
     jumpBtn.style.display = currentIdx !== targetIdx ? 'block' : 'none';
 
     const s = sessions[currentIdx];
+    const splitMeta = getSplitDisplayMeta(s.split);
     const today = todayIso();
     const complete = isSessionComplete(s);
     const started = isSessionStarted(s);
@@ -1552,8 +1606,9 @@
       statusBadge = `<span class="badge badge-upcoming">Upcoming</span>`;
     }
 
+    const titleColorStyle = splitMeta.color ? `color:${splitMeta.color};` : 'color:var(--accent);';
     document.getElementById('navMeta').innerHTML = `
-      <span style="font-size:12px;font-weight:700;color:var(--accent);">${s.split}</span>
+      <span style="font-size:12px;font-weight:700;${titleColorStyle}">${splitMeta.fullTitle}</span>
       <span style="font-size:11px;color:var(--muted);">(${s.tab})</span>
       ${statusBadge}
     `;
@@ -1966,7 +2021,7 @@
 
     // 1. Hydrate historical points & weekly completion from hidden Archive rollup first
     archiveSummary.forEach(item => {
-      if (activeTabsSet.has(item.tab)) return; // Avoid double-counting if tab is still in active window
+      if (activeTabsSet.has(item.tab)) return;
 
       if (item.category === 'meta') {
         const wk = getMondayWeekKey(item.date);
@@ -2282,12 +2337,10 @@
       });
     });
 
-    // Ensure chronological ordering across merged archive + active points
     Object.keys(historyMap).forEach(k => {
       historyMap[k].sort((a, b) => a.date.localeCompare(b.date));
     });
 
-    // Compute x wk (y/3) streak across chronological Monday weeks (Archive + Active)
     const sortedWeekKeys = Object.keys(weekGroups).sort();
     let completedWeeksStreak = 0;
     for (const wk of sortedWeekKeys) {
@@ -2304,7 +2357,6 @@
     const wkLabel = completedWeeksStreak === 1 ? '1 wk' : `${completedWeeksStreak} wks`;
     const streakDisplay = `${wkLabel} (${activeWg.done}/${activeWg.total || 3})`;
 
-    // Compute average e1RM gain across main lifts (latest weekly peak vs all-time starting peak)
     const mainLifts = Array.from(mainLiftSet);
     const liftDeltas = [];
     mainLifts.forEach(name => {
@@ -2513,6 +2565,7 @@
     }
 
     const s = sessions[selectedCalendarIdx];
+    const splitMeta = getSplitDisplayMeta(s.split);
     const today = todayIso();
     const complete = isSessionComplete(s);
     const started = isSessionStarted(s);
@@ -2574,12 +2627,13 @@
       `;
     }).join('');
 
+    const titleColorStyle = splitMeta.color ? `color:${splitMeta.color};` : 'color:var(--accent);';
     return `
       <div class="cal-preview-card">
         <div class="preview-top">
           <div>
             <div style="font-size:15px;font-weight:800;">${formatDisplayDate(s.date)}</div>
-            <div style="font-size:12px;font-weight:700;color:var(--accent);margin-top:2px;">${s.split} <span style="color:var(--muted);font-weight:600;">(${s.tab})</span></div>
+            <div style="font-size:12px;font-weight:700;${titleColorStyle}margin-top:2px;">${splitMeta.fullTitle} <span style="color:var(--muted);font-weight:600;">(${s.tab})</span></div>
           </div>
           ${badgeHtml}
         </div>
@@ -2633,12 +2687,13 @@
       else if (iso < today) statusCls = 'status-missed';
 
       const isSelected = entry.idx === selectedCalendarIdx;
-      const shortSplit = entry.s.split.replace(/Workout\s*/i, 'W');
+      const splitMeta = getSplitDisplayMeta(entry.s.split);
+      const tagColorStyle = (!complete && splitMeta.color) ? `style="color:${splitMeta.color};"` : '';
 
       cellsHtml += `
         <div class="cal-cell has-workout ${statusCls} ${isSelected ? 'selected-day' : ''}" onclick="selectCalendarSession(${entry.idx})">
           <span>${day}</span>
-          <span class="cal-dot">${complete ? '✓' : shortSplit}</span>
+          <span class="cal-dot" ${tagColorStyle}>${complete ? '✓' : splitMeta.calTag}</span>
         </div>
       `;
     }
@@ -2682,3 +2737,4 @@
 </script>
 </body>
 </html>
+
