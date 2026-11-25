@@ -55,6 +55,7 @@
     margin-bottom: 10px;
   }
   .brand-title { font-size: 16px; font-weight: 800; letter-spacing: 0.2px; }
+  .brand-actions { display: flex; align-items: center; gap: 6px; }
   .sync-pill {
     font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
     background: var(--surface-2); color: var(--muted); border: 1px solid var(--border);
@@ -64,6 +65,16 @@
   .sync-pill.syncing { color: var(--amber); border-color: rgba(245,158,11,0.4); }
   .sync-pill.dirty { color: var(--accent); border-color: rgba(56,189,248,0.45); background: var(--accent-dim); }
   .sync-pill.queued { color: var(--amber); border-color: rgba(245,158,11,0.45); background: var(--amber-dim); }
+  .gear-pill {
+    font-size: 13px; line-height: 1; padding: 4px 8px; border-radius: 999px;
+    background: var(--surface-2); color: var(--muted); border: 1px solid var(--border);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .gear-pill.active-alerts {
+    color: var(--accent);
+    border-color: rgba(56, 189, 248, 0.45);
+    background: var(--accent-dim);
+  }
 
   /* Day Navigator */
   .day-nav {
@@ -277,7 +288,7 @@
     box-shadow: 0 0 12px rgba(34, 197, 94, 0.35);
   }
 
-  /* Native PWA Exercise Picker Modal */
+  /* Native PWA Bottom Sheet Modals */
   .modal-backdrop {
     position: fixed; inset: 0; z-index: 60;
     background: rgba(5, 8, 14, 0.78);
@@ -291,7 +302,7 @@
     border-top: 1px solid var(--border);
     border-radius: 20px 20px 0 0;
     padding: 16px 16px 26px 16px;
-    max-height: 82vh;
+    max-height: 85vh;
     overflow-y: auto;
     animation: sheetUp 0.18s ease-out;
   }
@@ -345,6 +356,55 @@
     background: var(--purple); color: #1e1035;
     border: none; border-radius: 10px; padding: 0 14px;
     font-size: 13px; font-weight: 800; cursor: pointer;
+  }
+
+  /* Settings Sheet Controls */
+  .setting-row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 13px; margin-bottom: 9px; gap: 12px;
+  }
+  .setting-info { flex: 1; }
+  .setting-name { font-size: 13px; font-weight: 800; color: var(--text); }
+  .setting-desc { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+  .toggle-switch {
+    position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 999px; transition: 0.2s;
+  }
+  .toggle-slider::before {
+    content: ""; position: absolute; height: 18px; width: 18px;
+    left: 2px; bottom: 2px; background: var(--muted);
+    border-radius: 50%; transition: 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-slider {
+    background: var(--accent-dim); border-color: var(--accent);
+  }
+  .toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px); background: var(--accent);
+  }
+  .time-select {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 9px;
+    padding: 7px 10px; font-size: 12px; font-weight: 700; outline: none;
+  }
+  .settings-actions {
+    display: flex; gap: 8px; margin-top: 12px;
+  }
+  .settings-save-btn {
+    flex: 1; padding: 11px; border-radius: 11px;
+    background: var(--accent); color: #041d2e; border: none;
+    font-size: 13px; font-weight: 900; cursor: pointer;
+  }
+  .settings-test-btn {
+    padding: 11px 13px; border-radius: 11px;
+    background: var(--surface-2); color: var(--green);
+    border: 1px solid rgba(34,197,94,0.4);
+    font-size: 12px; font-weight: 800; cursor: pointer;
   }
 
   /* Contextual Save FAB */
@@ -636,17 +696,20 @@
     <div class="top-bar">
       <div class="brand-row">
         <div class="brand-title">Gym Log</div>
-        <button id="syncPill" class="sync-pill" onclick="handleSyncPillClick()">Connecting...</button>
+        <div class="brand-actions">
+          <button id="syncPill" class="sync-pill" onclick="handleSyncPillClick()">Connecting...</button>
+          <button id="settingsPill" class="gear-pill" onclick="openSettingsModal()" title="Discord Notification Settings">⚙</button>
+        </div>
       </div>
       <div class="day-nav">
-        <button id="prevBtn" class="nav-arrow" onclick="stepDay(-1)">&#8249;</button>
+        <button id="prevBtn" class="nav-arrow" onclick="stepDay(-1)">‹</button>
         <div class="nav-center">
           <div id="navDate" class="nav-date">Loading schedule...</div>
           <div id="navMeta" class="nav-meta"></div>
         </div>
-        <button id="nextBtn" class="nav-arrow" onclick="stepDay(1)">&#8250;</button>
+        <button id="nextBtn" class="nav-arrow" onclick="stepDay(1)">›</button>
       </div>
-      <button id="jumpNextBtn" class="jump-btn" style="display:none;" onclick="jumpToTarget()">Jump to Next Up &#8594;</button>
+      <button id="jumpNextBtn" class="jump-btn" style="display:none;" onclick="jumpToTarget()">Jump to Next Up →</button>
       <div id="progWrap" class="prog-wrap" style="display:none;">
         <div class="prog-labels">
           <span id="progText">0 / 0 Sets Done</span>
@@ -662,7 +725,7 @@
   <!-- PROGRESS & INSIGHTS VIEW -->
   <div id="view-progress" style="display:none; padding-top:14px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-      <div style="font-size:18px;font-weight:800;">Progress &amp; Insights</div>
+      <div style="font-size:18px;font-weight:800;">Progress & Insights</div>
       <button class="sync-pill live" onclick="handleSyncPillClick()">Refresh Data</button>
     </div>
     <div id="progressContainer"></div>
@@ -694,9 +757,84 @@
   </div>
 </div>
 
+<!-- DISCORD NOTIFICATION SETTINGS MODAL -->
+<div id="settingsModal" class="modal-backdrop" onclick="closeSettingsModal(event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title">⚙ Discord Alert Settings</div>
+      <button class="modal-close" onclick="closeSettingsModal()">Done</button>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <div class="setting-name">Upcoming Workout Reminder</div>
+        <div class="setting-desc">Pings Discord on scheduled training days only if 0 sets are logged before the chosen time.</div>
+      </div>
+      <label class="toggle-switch">
+        <input id="prefUpcomingEnabled" type="checkbox" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <div class="setting-name">Reminder Delivery Time</div>
+        <div class="setting-desc">Hour to check for unlogged scheduled workouts.</div>
+      </div>
+      <select id="prefUpcomingHour" class="time-select">
+        <option value="6">6:00 AM</option>
+        <option value="7">7:00 AM</option>
+        <option value="8">8:00 AM</option>
+        <option value="12">12:00 PM</option>
+        <option value="16">4:00 PM</option>
+        <option value="17">5:00 PM</option>
+        <option value="18">6:00 PM</option>
+      </select>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <div class="setting-name">Nightly AI Coach Brief</div>
+        <div class="setting-desc">Posts your 9:00 PM coaching recap to Discord after training days.</div>
+      </div>
+      <label class="toggle-switch">
+        <input id="prefCoachEnabled" type="checkbox" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <div class="setting-name">4-Week Trend Digest</div>
+        <div class="setting-desc">Sends a 28-day e1RM delta, adherence, and conditioning summary every 4 weeks.</div>
+      </div>
+      <label class="toggle-switch">
+        <input id="prefDigest4WkEnabled" type="checkbox" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <div class="setting-name">Snooze Alerts (7 Days)</div>
+        <div id="snoozeDesc" class="setting-desc">Temporarily mute all scheduled Discord pings for travel or deload weeks.</div>
+      </div>
+      <label class="toggle-switch">
+        <input id="prefSnooze7d" type="checkbox" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="settings-actions">
+      <button id="saveSettingsBtn" class="settings-save-btn" onclick="saveSettingsFromModal()">Save Preferences</button>
+      <button id="testDigestBtn" class="settings-test-btn" onclick="triggerTest4WeekDigest()">Send 4-Wk Digest</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONTEXTUAL SAVE FAB -->
 <button id="saveFab" class="save-fab" onclick="saveCurrentSession()">
-  <span>&#10003;</span>
+  <span>✓</span>
   <span id="saveFabLabel">Save Changes</span>
 </button>
 
@@ -710,7 +848,7 @@
     <button class="rest-btn" onclick="startRest(90)">1:30</button>
     <button class="rest-btn" onclick="startRest(150)">2:30</button>
     <button class="rest-btn" onclick="adjustRest(30)">+30s</button>
-    <button class="rest-btn" onclick="stopRest()">&#10005;</button>
+    <button class="rest-btn" onclick="stopRest()">✕</button>
   </div>
 </div>
 
@@ -733,6 +871,13 @@
   let cardioOptions = [];
   let cardioUnits = {};
   let splitConfig = {};
+  let notifyPrefs = {
+    upcomingEnabled: false,
+    upcomingHour: 7,
+    coachEnabled: false,
+    digest4WkEnabled: false,
+    snoozeUntil: ''
+  };
   let isOffline = false;
   let isFlushingQueue = false;
   let aiInsights = null;
@@ -748,7 +893,7 @@
   let savedSnapshot = '';
   let restSeconds = 0;
   let restInterval = null;
-  let pickerTarget = null; // { exIdx, setIdx, mode: 'circuit' | 'cardio' }
+  let pickerTarget = null;
 
   function hasValue(v) {
     return v !== '' && v !== null && v !== undefined && !isNaN(Number(v));
@@ -771,6 +916,98 @@
   function isoToEpoch(isoDate) {
     const [y, m, d] = isoDate.split('-').map(Number);
     return new Date(y, m - 1, d).getTime();
+  }
+
+  function updateSettingsPillHighlight() {
+    const pill = document.getElementById('settingsPill');
+    if (!pill) return;
+    const anyOn = Boolean(notifyPrefs.upcomingEnabled || notifyPrefs.coachEnabled || notifyPrefs.digest4WkEnabled);
+    pill.classList.toggle('active-alerts', anyOn);
+  }
+
+  function openSettingsModal() {
+    document.getElementById('prefUpcomingEnabled').checked = Boolean(notifyPrefs.upcomingEnabled);
+    document.getElementById('prefUpcomingHour').value = String(notifyPrefs.upcomingHour || 7);
+    document.getElementById('prefCoachEnabled').checked = Boolean(notifyPrefs.coachEnabled);
+    document.getElementById('prefDigest4WkEnabled').checked = Boolean(notifyPrefs.digest4WkEnabled);
+
+    const today = todayIso();
+    const isSnoozed = Boolean(notifyPrefs.snoozeUntil && today <= notifyPrefs.snoozeUntil);
+    document.getElementById('prefSnooze7d').checked = isSnoozed;
+    document.getElementById('snoozeDesc').textContent = isSnoozed
+      ? `Alerts muted through ${notifyPrefs.snoozeUntil}. Toggle off to resume early.`
+      : 'Temporarily mute all scheduled Discord pings for travel or deload weeks.';
+
+    document.getElementById('settingsModal').classList.add('open');
+  }
+
+  function closeSettingsModal(e) {
+    if (e && e.target && e.target.id !== 'settingsModal') return;
+    document.getElementById('settingsModal').classList.remove('open');
+  }
+
+  async function saveSettingsFromModal() {
+    const btn = document.getElementById('saveSettingsBtn');
+    const snoozeChecked = document.getElementById('prefSnooze7d').checked;
+    let snoozeDate = '';
+    if (snoozeChecked) {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      snoozeDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    const updatedPrefs = {
+      upcomingEnabled: document.getElementById('prefUpcomingEnabled').checked,
+      upcomingHour: Number(document.getElementById('prefUpcomingHour').value) || 7,
+      coachEnabled: document.getElementById('prefCoachEnabled').checked,
+      digest4WkEnabled: document.getElementById('prefDigest4WkEnabled').checked,
+      snoozeUntil: snoozeDate
+    };
+
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    try {
+      const resp = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'saveNotifyPrefs', prefs: updatedPrefs })
+      });
+      const res = await resp.json();
+      if (res && res.ok && res.notifyPrefs) {
+        notifyPrefs = res.notifyPrefs;
+        localStorage.setItem('gymlog_notify_prefs', JSON.stringify(notifyPrefs));
+        updateSettingsPillHighlight();
+      }
+      closeSettingsModal();
+    } catch (err) {
+      alert('Could not save preferences: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save Preferences';
+    }
+  }
+
+  async function triggerTest4WeekDigest() {
+    const btn = document.getElementById('testDigestBtn');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    try {
+      const resp = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'send4WeekDigestNow' })
+      });
+      const res = await resp.json();
+      alert(res.message || (res.ok ? 'Digest sent!' : 'Failed to send digest.'));
+    } catch (err) {
+      alert('Error sending digest: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Send 4-Wk Digest';
+    }
   }
 
   function resolveSplitColor(rawColor) {
@@ -946,7 +1183,6 @@
     });
   }
 
-  // --- OFFLINE SYNC QUEUE HELPERS ---
   function readSyncQueue() {
     try {
       const raw = localStorage.getItem(SYNC_QUEUE_KEY);
@@ -1032,6 +1268,11 @@
         if (latestServerRes.splitConfig && typeof latestServerRes.splitConfig === 'object') {
           splitConfig = latestServerRes.splitConfig;
           localStorage.setItem('gymlog_split_cfg', JSON.stringify(splitConfig));
+        }
+        if (latestServerRes.notifyPrefs) {
+          notifyPrefs = latestServerRes.notifyPrefs;
+          localStorage.setItem('gymlog_notify_prefs', JSON.stringify(notifyPrefs));
+          updateSettingsPillHighlight();
         }
         const activeId = sessions[currentIdx] ? sessions[currentIdx].id : null;
         sessions = latestServerRes.sessions;
@@ -1298,6 +1539,12 @@
       const cachedSplitCfg = localStorage.getItem('gymlog_split_cfg');
       if (cachedSplitCfg) splitConfig = JSON.parse(cachedSplitCfg);
 
+      const cachedNotify = localStorage.getItem('gymlog_notify_prefs');
+      if (cachedNotify) {
+        notifyPrefs = JSON.parse(cachedNotify);
+        updateSettingsPillHighlight();
+      }
+
       const cached = localStorage.getItem('gymlog_cache');
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -1360,6 +1607,11 @@
         if (res.splitConfig && typeof res.splitConfig === 'object') {
           splitConfig = res.splitConfig;
           localStorage.setItem('gymlog_split_cfg', JSON.stringify(splitConfig));
+        }
+        if (res.notifyPrefs) {
+          notifyPrefs = res.notifyPrefs;
+          localStorage.setItem('gymlog_notify_prefs', JSON.stringify(notifyPrefs));
+          updateSettingsPillHighlight();
         }
         if (res.aiInsights) {
           aiInsights = res.aiInsights;
@@ -1595,9 +1847,9 @@
 
     let statusBadge = '';
     if (complete) {
-      statusBadge = `<span class="badge badge-done">Completed &#10003;</span>`;
+      statusBadge = `<span class="badge badge-done">Completed ✓</span>`;
     } else if (s.date === today) {
-      statusBadge = `<span class="badge badge-next">Today &#8226; Next Up</span>`;
+      statusBadge = `<span class="badge badge-next">Today • Next Up</span>`;
     } else if (currentIdx === targetIdx) {
       statusBadge = `<span class="badge badge-next">Next Up</span>`;
     } else if (s.date < today) {
@@ -1655,7 +1907,7 @@
       const titleHtml = cat === 'cardio'
         ? `<button class="ex-swap-btn ${firstSet.moveModified ? 'modified-move' : ''}" onclick="openMovePicker(${exIdx}, 0, 'cardio')" title="Tap to change modality">
              <span>${activeCardioName}</span>
-             <span style="font-size:11px;color:var(--green);">&#9662;</span>
+             <span style="font-size:11px;color:var(--green);">▾</span>
            </button>`
         : `<div class="ex-name">${ex.name}</div>`;
 
@@ -1680,7 +1932,7 @@
           return `
             <div class="set-row cardio-row">
               <div class="stepper">
-                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">&#8722;</button>
+                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
                 <div class="step-val">
                   <span class="step-main">${displayReps} min</span>
                   <span class="step-hint">Goal: ${st.goal} min</span>
@@ -1688,14 +1940,14 @@
                 <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
               </div>
               <div class="stepper ${st.weightModified ? 'modified-weight' : ''}">
-                <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -${cfg.step})">&#8722;</button>
+                <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -${cfg.step})">−</button>
                 <div class="step-val">
                   <span class="step-main">${distVal} ${cfg.unit}</span>
                   <span class="step-hint">${rateHint}</span>
                 </div>
                 <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, ${cfg.step})">+</button>
               </div>
-              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">&#10003;</button>
+              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
             </div>
           `;
         }
@@ -1707,19 +1959,19 @@
               <button class="move-tag-btn ${st.moveModified ? 'modified-move' : ''}" onclick="openMovePicker(${exIdx}, ${setIdx}, 'circuit')">
                 <span class="move-tag-top">
                   <span>Move ${setIdx + 1}</span>
-                  <span>&#9662;</span>
+                  <span>▾</span>
                 </span>
                 <span class="move-tag-name" style="${st.moveName ? '' : 'color:var(--muted);'}">${moveLbl}</span>
               </button>
               <div class="stepper">
-                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">&#8722;</button>
+                <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
                 <div class="step-val">
                   <span class="step-main">${displayReps} reps</span>
                   <span class="step-hint">Goal: ${st.goal}</span>
                 </div>
                 <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
               </div>
-              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">&#10003;</button>
+              <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
             </div>
           `;
         }
@@ -1734,7 +1986,7 @@
           <div class="set-row">
             <div class="set-num">S${setIdx + 1}</div>
             <div class="stepper ${(cat === 'main' && isNextSet) ? 'active-weight' : ''} ${st.weightModified ? 'modified-weight' : ''}">
-              <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -2.5)">&#8722;</button>
+              <button class="step-btn" onclick="adjustWeight(${exIdx}, ${setIdx}, -2.5)">−</button>
               <div class="step-val">
                 <span class="step-main">${st.weight} lb${fxBadge}</span>
                 <span class="step-hint">${weightHint}</span>
@@ -1743,14 +1995,14 @@
             </div>
 
             <div class="stepper">
-              <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">&#8722;</button>
+              <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, -1)">−</button>
               <div class="step-val">
                 <span class="step-main">${displayReps} reps</span>
                 <span class="step-hint">Goal: ${st.goal}</span>
               </div>
               <button class="step-btn" onclick="adjustReps(${exIdx}, ${setIdx}, 1)">+</button>
             </div>
-            <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">&#10003;</button>
+            <button class="check-btn ${st.completed ? 'checked' : ''}" onclick="toggleSet(${exIdx}, ${setIdx})">✓</button>
           </div>
         `;
       }).join('');
@@ -1862,7 +2114,7 @@
     const maxReps = entries.length ? Math.max(...entries.map(e => e.totalReps), 1) : 1;
 
     const barsHtml = entries.length ? `
-      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">Volume &amp; Avg Reps by Movement</div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">Volume & Avg Reps by Movement</div>
       <div class="circuit-bar-list">
         ${entries.map(item => {
           const pct = Math.max(8, Math.round((item.totalReps / maxReps) * 100));
@@ -1969,7 +2221,7 @@
     const diffStr = diff >= 0 ? `+${diff} ${unit}` : `${diff} ${unit}`;
 
     const legendSub = useWeeklyPeak
-      ? `<span style="font-size:10px;color:var(--muted);">&#9679; Weekly Peak Line &nbsp; &#9675; Individual Sessions</span>`
+      ? `<span style="font-size:10px;color:var(--muted);">● Weekly Peak Line   ○ Individual Sessions</span>`
       : `<span style="font-size:10px;color:var(--muted);">${rawPoints.length} sessions logged</span>`;
 
     return `
@@ -2019,7 +2271,6 @@
     let weekCardioGoal = 0;
     const weekGroups = {};
 
-    // 1. Hydrate historical points & weekly completion from hidden Archive rollup first
     archiveSummary.forEach(item => {
       if (activeTabsSet.has(item.tab)) return;
 
@@ -2162,7 +2413,6 @@
       }
     });
 
-    // 2. Append active 4-month window sessions on top
     sessions.forEach(s => {
       const complete = isSessionComplete(s);
       if (activeTabName && s.tab === activeTabName) {
@@ -2385,9 +2635,9 @@
     const aiCardHtml = `
       <div class="ai-card">
         <div class="ai-header">
-          <div class="ai-title">&#10024; AI Coach Brief</div>
+          <div class="ai-title">✨ AI Coach Brief</div>
           <button class="sync-pill" onclick="forceRefreshAiInsights(event)" ${refreshingInsights ? 'disabled' : ''}>
-            ${refreshingInsights ? 'Analyzing...' : '&#8635; Update Now'}
+            ${refreshingInsights ? 'Analyzing...' : '↻ Update Now'}
           </button>
         </div>
         <ul class="ai-bullet-list">
@@ -2407,28 +2657,28 @@
             <div class="kpi-lbl">This Month${activeTabName ? ' (' + activeTabName + ')' : ''}</div>
             <div class="kpi-val" style="color:var(--green);margin-top:2px;">${monthTotal ? `${monthDone} / ${monthTotal}` : '—'}</div>
           </div>
-          <span style="font-size:17px;">&#10003;</span>
+          <span style="font-size:17px;">✓</span>
         </div>
         <div class="kpi-box">
           <div>
             <div class="kpi-lbl">e1RM Gain</div>
             <div class="kpi-val" style="color:${e1rmGainColor};margin-top:2px;">${e1rmGainDisplay}</div>
           </div>
-          <span style="font-size:15px;">&#128200;</span>
+          <span style="font-size:15px;">📈</span>
         </div>
         <div class="kpi-box">
           <div>
             <div class="kpi-lbl">Weekly Cardio</div>
             <div class="kpi-val" style="color:var(--purple);margin-top:2px;">${weeklyCardioDisplay}</div>
           </div>
-          <span style="font-size:15px;">&#9201;</span>
+          <span style="font-size:15px;">⏱</span>
         </div>
         <div class="kpi-box">
           <div>
             <div class="kpi-lbl">Active Streak</div>
             <div class="kpi-val" style="color:var(--green);margin-top:2px;">${streakDisplay}</div>
           </div>
-          <span style="font-size:16px;">&#128293;</span>
+          <span style="font-size:16px;">🔥</span>
         </div>
       </div>
     `;
@@ -2459,7 +2709,7 @@
 
     const accessoryNames = Array.from(accessorySet);
     const accHtml = accessoryNames.length ? `
-      <div class="sec-header">Accessories &amp; Circuits (Tap to Expand)</div>
+      <div class="sec-header">Accessories & Circuits (Tap to Expand)</div>
       <div class="stat-grid">
         ${accessoryNames.map(name => {
           const st = accessoryStats[name];
@@ -2509,7 +2759,7 @@
     }));
     const cardioNames = Array.from(cardioSet);
     const cardioHtml = cardioNames.length ? `
-      <div class="sec-header">Conditioning &amp; Output (Tap to Expand)</div>
+      <div class="sec-header">Conditioning & Output (Tap to Expand)</div>
       <div class="stat-grid">
         ${cardioNames.map(name => {
           const st = cardioStats[name];
@@ -2571,7 +2821,7 @@
     const started = isSessionStarted(s);
 
     let badgeHtml = '';
-    if (complete) badgeHtml = `<span class="badge badge-done">Completed &#10003;</span>`;
+    if (complete) badgeHtml = `<span class="badge badge-done">Completed ✓</span>`;
     else if (s.date === today || selectedCalendarIdx === targetIdx) badgeHtml = `<span class="badge badge-next">Next Up</span>`;
     else if (s.date < today) badgeHtml = `<span class="badge badge-missed">${started ? 'Partial Past' : 'Past Unlogged'}</span>`;
     else badgeHtml = `<span class="badge badge-upcoming">Upcoming</span>`;
@@ -2639,7 +2889,7 @@
         </div>
         ${exRowsHtml}
         <div class="preview-actions">
-          <button class="preview-open-btn" onclick="jumpToSessionIndex(${selectedCalendarIdx})">Open in Logger &#8594;</button>
+          <button class="preview-open-btn" onclick="jumpToSessionIndex(${selectedCalendarIdx})">Open in Logger →</button>
           <button class="preview-close-btn" onclick="selectCalendarSession(${selectedCalendarIdx})">Close</button>
         </div>
       </div>
@@ -2702,14 +2952,14 @@
 
     box.innerHTML = `
       <div class="cal-header">
-        <button class="nav-arrow" onclick="stepCalendarMonth(-1)">&#8249;</button>
+        <button class="nav-arrow" onclick="stepCalendarMonth(-1)">‹</button>
         <div style="text-align:center;">
           <div class="cal-month-title">${monthNames[calMonth]} ${calYear}</div>
           <div style="font-size:11px;color:var(--muted);font-weight:700;margin-top:2px;">
             ${monthDone} / ${monthTotal} Workouts Completed (${consistencyPct}%)
           </div>
         </div>
-        <button class="nav-arrow" onclick="stepCalendarMonth(1)">&#8250;</button>
+        <button class="nav-arrow" onclick="stepCalendarMonth(1)">›</button>
       </div>
       <div class="cal-grid">${cellsHtml}</div>
       <div class="legend-row">
@@ -2737,4 +2987,3 @@
 </script>
 </body>
 </html>
-
